@@ -1041,3 +1041,8 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   script or agent asking for `speed: 1e300` got a `G1 … F1000…` line with a 301-digit number; it now refuses speeds above 1,000,000 mm/min,
   as `job.generate` already did. Regression test fails without the fix. Nightly sweep: full `cargo xtask ci` green (after `rustup target add
   wasm32-unknown-unknown`, #43); `cargo audit` reports no vulnerabilities (3 unmaintained warnings from the zbus family).
+- **2026-11-07 — issue #55, org move to StitchFoundry.** Pointed the Pages links (README, features page `og:image`, MakerFoundry and domain
+  docs, marketing, release notes), the GitHub links (`help.rs` `GITHUB_URL`, `Cargo.toml`, README, features page, release notes) and the
+  MakerFoundry spec link at the `StitchFoundry` org. App ids (`com.stitchwright.*`) and past ROADMAP entries are unchanged. **Not done:**
+  Bruce-only items (DNS `www` CNAME, `ANTHROPIC_API_KEY` secret, published release text). **Not checked:** the new links were not fetched
+  from this sandbox; the full gate result is in the pull request's CI.
