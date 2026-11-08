@@ -1053,3 +1053,8 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   simulator (trace, shrink, a bed already tiny). **Not done:** first-mark test grid, Find my laser, presets. **Not checked:** the
   full gate was not run in this job (the pull request's CI is the check), nothing was run on real hardware, and the step was not
   looked at on screen.
+- **2026-11-08 — Version 0.3.0 (#73).** The workspace version is 0.3.0 (`Cargo.toml`, both lockfiles, edited by hand because the job could not
+  build), ahead of tagging `v0.3.0`. 0.2.1 was never published, so `docs/releases/v0.3.0.md` covers everything since v0.2.0 (the 0.2.1 items,
+  the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
+  Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
+  pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.
