@@ -1058,3 +1058,7 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
   Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
   pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.
+- **2026-11-08 — Fix #76: resuming after the program's `M5` no longer switches the laser back on.** `resume_from` replayed the
+  program's `M3`/`M4` line (at S0) even when the skipped part had already sent `M5`, so resuming from the footer left the laser enabled
+  with nothing to turn it off. `M5` now clears the remembered spindle line. Test: `resuming_after_the_laser_was_switched_off_does_not_switch_it_on_again`
+  (fails without the fix). Nightly sweep: full gate green on main before the change, no needs-triage issues. **Not checked:** real hardware.
