@@ -10,6 +10,7 @@ use laserfoundry_doc::Origin;
 use serde_json::{Map, Value, json};
 
 use crate::i18n::{tr, trf};
+use crate::laser_presets::{self, Preset};
 use crate::platform::Platform;
 use crate::{LaserFoundryApp, Target};
 
@@ -46,6 +47,8 @@ pub(crate) struct Wizard {
     pub x_right: Option<bool>,
     /// The answer to "did the head reach every corner without touching the frame?"
     pub bed_ok: Option<bool>,
+    /// Index into [`laser_presets::presets`]; `None` is "Other / I don't know".
+    pub preset: Option<usize>,
     pub name: String,
 }
 
@@ -266,11 +269,44 @@ fn connect_step(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     } else {
         ui.label(tr("Machine connections are not available in this build."));
     }
+    preset_picker(app, ui);
     if ui.button(tr("Skip to naming")).clicked() {
         app.wizard.step = Step::Save;
     }
     let connected = app.link.is_some();
     nav(app, ui, None, Some((Step::Read, connected)));
+}
+
+/// Copies a preset's bed size into the machine and offers its name for the machine.
+pub(crate) fn apply_preset(app: &mut LaserFoundryApp, preset: &Preset) {
+    if app.run("machine.set", json!({ "bed_width": preset.bed_width, "bed_height": preset.bed_height })).is_some() {
+        app.view = None;
+        app.wizard.name = preset.name.clone();
+    }
+}
+
+/// The optional "pick your laser" list under the connection choice.
+fn preset_picker(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
+    let list = laser_presets::presets();
+    ui.add_space(6.0);
+    ui.label(tr("Your laser (optional)"));
+    let chosen = app.wizard.preset.and_then(|i| list.get(i));
+    egui::ComboBox::from_id_salt("wizard_preset").selected_text(chosen.map_or_else(|| tr("Other / I don't know"), |p| p.name.clone())).show_ui(
+        ui,
+        |ui| {
+            ui.selectable_value(&mut app.wizard.preset, None, tr("Other / I don't know"));
+            for (i, p) in list.iter().enumerate() {
+                ui.selectable_value(&mut app.wizard.preset, Some(i), &p.name);
+            }
+        },
+    );
+    let Some(p) = chosen else { return };
+    let power = p.optical_watts.map_or(String::new(), |w| format!(", {w} W"));
+    ui.weak(trf!("Bed {w} × {h} mm{power}: from the spec sheet, not tested", w = p.bed_width, h = p.bed_height, power = power));
+    ui.hyperlink_to(tr("Maker's page"), &p.source);
+    if ui.button(tr("Use these values for this machine")).clicked() {
+        apply_preset(app, &p.clone());
+    }
 }
 
 fn read_step(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {

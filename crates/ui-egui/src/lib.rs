@@ -14,6 +14,7 @@ pub(crate) mod i18n {
 mod ai_ui;
 mod browser_recent;
 mod job_position;
+mod laser_presets;
 mod machine_report;
 mod machine_setup;
 mod maker_ui;
