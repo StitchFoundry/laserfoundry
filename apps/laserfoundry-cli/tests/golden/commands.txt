@@ -78,6 +78,7 @@ job.set_scope
 job.set_optimize
 job.estimate
 job.frame
+machine.bed_outline
 job.simulate
 ai.context
 ai.prepare_picture
