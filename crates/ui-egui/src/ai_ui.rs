@@ -127,10 +127,12 @@ impl AiState {
 impl LaserFoundryApp {
     /// Opens one of the AI windows (loading what was kept the first time).
     pub(crate) fn open_ai(&mut self, window: Window) {
-        if self.ai.window != Some(window) {
-            self.ai.note = None; // what the last window said is not about this one
+        // What another open window said is not about this one (a note left by loading the settings, a key from an
+        // earlier version having been removed, belongs to whichever window opens first).
+        if self.ai.window.is_some_and(|open| open != window) {
+            self.ai.note = None;
         }
-        self.load_ai(); // (may leave a note of its own: a key from an earlier version was removed)
+        self.load_ai();
         if !self.ai_feature_on(window) {
             return;
         }
@@ -520,6 +522,7 @@ impl LaserFoundryApp {
         });
         if !open {
             self.ai.window = None;
+            self.ai.note = None;
         }
     }
 
