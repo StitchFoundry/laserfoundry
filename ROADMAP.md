@@ -1063,3 +1063,10 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
   Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
   pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.
+- **2026-11-09 — issue #67, no "use my own API key".** The account window has no own-key checkbox or key field, the payer row and consent
+  dialog no longer mention one, and every AI request goes through the Foundry Account (credits). A key kept by an earlier version is
+  deleted from the stored settings when they load (written back without `key`/`use_key`), and a person who relied on it sees "AI now uses your
+  Foundry Account. Sign in to continue." `Auth::Key` stays in `laserfoundry-ai` for headless/developer use only and is unreachable from the
+  GUI. README, `docs/ai.md` and the checklist no longer offer the option. Checked with unit tests (no key option, stored key removed and the
+  note, requests go to the account service). **Not done:** the CLI/MCP environment-variable key path was not looked at (it is not in the
+  app); the retired i18n strings are inline `tr()` texts that went with the code; the first-use notice text itself never named a key.

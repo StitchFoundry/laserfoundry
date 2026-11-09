@@ -4,8 +4,11 @@
 > windows, and the desktop app's network client are built and tested. Not hosted or tried against a real
 > service or key yet; the hosted browser build does not offer the AI menu yet (see the end).
 
-Four features use an AI model (Claude, through the Messages API). Each is paid for in one of two ways:
-the person's **own Anthropic API key**, or a **session with the account service**, which takes credits.
+Four features use an AI model (Claude, through the Messages API). They are paid for with a **session with the account
+service** (the Foundry Account), which takes credits. The app has no "use my own API key" option (owner's decision,
+2026-11-07: the account is how every Foundry app signs in, pays and publishes); `Auth::Key` stays in `laserfoundry-ai`
+for headless and developer use only and is never reachable from the app's windows. A key kept by an earlier version is
+deleted from the stored settings the first time they load.
 
 | Feature            | What it does                                                                                                       |
 |--------------------|--------------------------------------------------------------------------------------------------------------------|

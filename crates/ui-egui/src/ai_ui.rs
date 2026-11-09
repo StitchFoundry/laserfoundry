@@ -57,8 +57,6 @@ pub(crate) struct AiState {
     server: String,
     email: String,
     password: String,
-    key: String,
-    use_key: bool,
     pub(crate) token: Option<String>,
     account: Option<Account>,
     pub(crate) pending: Option<Pending>,
@@ -111,9 +109,6 @@ impl Window {
 impl AiState {
     /// The way requests are paid for right now.
     fn auth(&self) -> Result<Auth, AiError> {
-        if self.use_key {
-            return Ok(Auth::Key(self.key.clone()));
-        }
         match &self.token {
             Some(token) => Ok(Auth::Session { server: self.server.clone(), token: token.clone() }),
             None => Err(AiError::SignIn),
@@ -132,15 +127,15 @@ impl AiState {
 impl LaserFoundryApp {
     /// Opens one of the AI windows (loading what was kept the first time).
     pub(crate) fn open_ai(&mut self, window: Window) {
-        self.load_ai();
+        if self.ai.window != Some(window) {
+            self.ai.note = None; // what the last window said is not about this one
+        }
+        self.load_ai(); // (may leave a note of its own: a key from an earlier version was removed)
         if !self.ai_feature_on(window) {
             return;
         }
         if self.ai.size_mm <= 0.0 {
             self.ai.size_mm = 100.0;
-        }
-        if self.ai.window != Some(window) {
-            self.ai.note = None; // what the last window said is not about this one
         }
         self.ai.window = Some(window);
     }
@@ -158,10 +153,15 @@ impl LaserFoundryApp {
         let text = |k: &str| kept.as_ref().and_then(|v| v.get(k)).and_then(Value::as_str).map(str::to_string);
         self.ai.server = text("server").unwrap_or_else(|| cloud::built_in_server().to_string());
         self.ai.email = text("email").unwrap_or_default();
-        self.ai.key = text("key").unwrap_or_default();
-        self.ai.use_key = kept.as_ref().and_then(|v| v.get("use_key")).and_then(Value::as_bool).unwrap_or(false);
         self.ai.token = text("token").filter(|t| t.starts_with(cloud::TOKEN_PREFIX));
         self.ai.consented = kept.as_ref().and_then(|v| v.get("consented")).and_then(Value::as_bool).unwrap_or(false);
+        // The Foundry Account is the only way to use AI. A key kept by an earlier version is deleted from the stored
+        // settings now (they are written back without it), and a person who relied on it is told what to do instead.
+        let had_key = text("key").is_some_and(|k| !k.is_empty());
+        let relied_on_key = kept.as_ref().and_then(|v| v.get("use_key")).and_then(Value::as_bool).unwrap_or(false);
+        if relied_on_key && self.ai.token.is_none() {
+            self.ai.note = Some((tr("AI now uses your Foundry Account. Sign in to continue."), false));
+        }
         let off: Vec<&str> = kept
             .as_ref()
             .and_then(|v| v.get("off"))
@@ -173,6 +173,9 @@ impl LaserFoundryApp {
                 self.ai.off[i] = off.contains(&name);
             }
         }
+        if had_key || kept.as_ref().is_some_and(|v| v.get("key").is_some() || v.get("use_key").is_some()) {
+            self.save_ai();
+        }
     }
 
     fn save_ai(&self) {
@@ -182,12 +185,12 @@ impl LaserFoundryApp {
             .filter(|(i, _)| self.ai.off[*i])
             .map(|(_, name)| name)
             .collect();
-        let value = json!({ "server": self.ai.server, "email": self.ai.email, "key": self.ai.key, "use_key": self.ai.use_key, "token": self.ai.token, "consented": self.ai.consented, "off": off });
+        let value = json!({ "server": self.ai.server, "email": self.ai.email, "token": self.ai.token, "consented": self.ai.consented, "off": off });
         self.platform.secret_set(SECRET_KEY, &value.to_string());
     }
 
     pub(crate) fn ai_error(&mut self, e: &AiError) {
-        if matches!(e, AiError::SignIn) && self.ai.token.is_some() && !self.ai.use_key {
+        if matches!(e, AiError::SignIn) && self.ai.token.is_some() {
             // the session ended: forget it so the window asks for a sign-in
             self.ai.token = None;
             self.ai.account = None;
@@ -249,7 +252,7 @@ impl LaserFoundryApp {
         self.platform.ai_log_file()?;
         let mut body: Value = serde_json::from_str(&request.body).unwrap_or(Value::Null);
         redact_pictures(&mut body);
-        let destination = if self.ai.use_key { laserfoundry_ai::API_URL.to_string() } else { request.url.clone() };
+        let destination = request.url.clone();
         Some(LogEntry { feature, destination, request: body })
     }
 
@@ -268,7 +271,7 @@ impl LaserFoundryApp {
     }
 
     fn ai_answer(&mut self, what: Pending, status: u16, body: &str) {
-        let session = !self.ai.use_key;
+        let session = true;
         match what {
             Pending::SignIn | Pending::SignUp => match cloud::parse(status, body) {
                 Ok(v) => match cloud::session(&v) {
@@ -278,7 +281,6 @@ impl LaserFoundryApp {
                             self.ai.email = email;
                         }
                         self.ai.password.clear();
-                        self.ai.use_key = false;
                         self.save_ai();
                         self.ai.note = Some((tr("Signed in."), false));
                         self.refresh_account();
@@ -341,9 +343,9 @@ impl LaserFoundryApp {
         }
     }
 
-    /// Asks the service for the account's credits (a no-op with the person's own key).
+    /// Asks the service for the account's credits.
     fn refresh_account(&mut self) {
-        if self.ai.use_key || self.ai.pending.is_some() {
+        if self.ai.pending.is_some() {
             return;
         }
         if let Some(token) = self.ai.token.clone() {
@@ -468,7 +470,7 @@ impl LaserFoundryApp {
     /// Asks, once, whether the request may go to the AI service.
     fn consent_dialog(&mut self, ctx: &egui::Context) {
         let Some((_, request)) = &self.ai.awaiting_consent else { return };
-        let destination = if self.ai.use_key { tr("Anthropic, with your API key") } else { request.url.clone() };
+        let destination = request.url.clone();
         let mut choice = None;
         egui::Modal::new(egui::Id::unique("ai_consent")).show(ctx, |ui| {
             ui.heading(tr("Send this to the AI service?"));
@@ -522,9 +524,7 @@ impl LaserFoundryApp {
     }
 
     fn payer_row(&mut self, ui: &mut egui::Ui) {
-        if self.ai.use_key {
-            ui.weak(tr("Paying with your own Anthropic key."));
-        } else if let Some(a) = &self.ai.account {
+        if let Some(a) = &self.ai.account {
             ui.horizontal(|ui| {
                 ui.label(trf!("Foundry credits: {credits}", credits = a.credits));
                 if ui.small_button(tr("Foundry Account…")).clicked() {
@@ -555,69 +555,56 @@ impl LaserFoundryApp {
 
     fn account_window(&mut self, ui: &mut egui::Ui) {
         let busy = self.ai.busy();
-        ui.checkbox(&mut self.ai.use_key, tr("Use my own Anthropic API key instead of an account"));
-        if self.ai.use_key {
-            ui.horizontal(|ui| {
-                ui.label(tr("API key"));
-                ui.add(egui::TextEdit::singleline(&mut self.ai.key).password(true).desired_width(300.0));
-            });
-            ui.weak(tr("Requests go straight to Anthropic and are billed to your key. The key is kept on this computer."));
-            if ui.button(tr("Save")).clicked() {
-                self.save_ai();
-                self.ai.note = Some((tr("Saved."), false));
+        ui.horizontal(|ui| {
+            ui.label(tr("Server"));
+            ui.add(egui::TextEdit::singleline(&mut self.ai.server).desired_width(320.0).hint_text("https://…"));
+        });
+        if self.ai.signed_in() {
+            ui.label(trf!("Signed in as {email}", email = self.ai.email));
+            if let Some(a) = self.ai.account.clone() {
+                ui.label(trf!("Foundry credits: {credits}", credits = a.credits));
+                if a.payments {
+                    for pack in &a.packs {
+                        let label = trf!("Buy {credits} Foundry credits for {price}", credits = pack.credits, price = cloud::dollars(pack.cents));
+                        if ui.add_enabled(!busy, egui::Button::new(label)).clicked() {
+                            let request = cloud::checkout(&self.ai.server, self.ai.token.as_deref().unwrap_or_default(), &pack.id);
+                            self.send_ai(Pending::Checkout, request);
+                        }
+                    }
+                } else {
+                    ui.weak(tr("This service is not taking payments yet."));
+                }
             }
+            ui.horizontal(|ui| {
+                if ui.add_enabled(!busy, egui::Button::new(tr("Refresh"))).clicked() {
+                    self.refresh_account();
+                }
+                if ui.add_enabled(!busy, egui::Button::new(tr("Sign out"))).clicked() {
+                    let request = cloud::sign_out(&self.ai.server, self.ai.token.as_deref().unwrap_or_default());
+                    self.send_ai(Pending::SignOut, request);
+                }
+            });
         } else {
             ui.horizontal(|ui| {
-                ui.label(tr("Server"));
-                ui.add(egui::TextEdit::singleline(&mut self.ai.server).desired_width(320.0).hint_text("https://…"));
+                ui.label(tr("Email"));
+                ui.add(egui::TextEdit::singleline(&mut self.ai.email).desired_width(260.0));
             });
-            if self.ai.signed_in() {
-                ui.label(trf!("Signed in as {email}", email = self.ai.email));
-                if let Some(a) = self.ai.account.clone() {
-                    ui.label(trf!("Foundry credits: {credits}", credits = a.credits));
-                    if a.payments {
-                        for pack in &a.packs {
-                            let label = trf!("Buy {credits} Foundry credits for {price}", credits = pack.credits, price = cloud::dollars(pack.cents));
-                            if ui.add_enabled(!busy, egui::Button::new(label)).clicked() {
-                                let request = cloud::checkout(&self.ai.server, self.ai.token.as_deref().unwrap_or_default(), &pack.id);
-                                self.send_ai(Pending::Checkout, request);
-                            }
-                        }
-                    } else {
-                        ui.weak(tr("This service is not taking payments yet."));
-                    }
+            ui.horizontal(|ui| {
+                ui.label(tr("Password"));
+                ui.add(egui::TextEdit::singleline(&mut self.ai.password).password(true).desired_width(260.0));
+            });
+            ui.horizontal(|ui| {
+                if ui.add_enabled(!busy, egui::Button::new(tr("Sign in"))).clicked() {
+                    let request = cloud::sign_in(&self.ai.server, &self.ai.email, &self.ai.password);
+                    self.save_ai();
+                    self.send_ai(Pending::SignIn, request);
                 }
-                ui.horizontal(|ui| {
-                    if ui.add_enabled(!busy, egui::Button::new(tr("Refresh"))).clicked() {
-                        self.refresh_account();
-                    }
-                    if ui.add_enabled(!busy, egui::Button::new(tr("Sign out"))).clicked() {
-                        let request = cloud::sign_out(&self.ai.server, self.ai.token.as_deref().unwrap_or_default());
-                        self.send_ai(Pending::SignOut, request);
-                    }
-                });
-            } else {
-                ui.horizontal(|ui| {
-                    ui.label(tr("Email"));
-                    ui.add(egui::TextEdit::singleline(&mut self.ai.email).desired_width(260.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label(tr("Password"));
-                    ui.add(egui::TextEdit::singleline(&mut self.ai.password).password(true).desired_width(260.0));
-                });
-                ui.horizontal(|ui| {
-                    if ui.add_enabled(!busy, egui::Button::new(tr("Sign in"))).clicked() {
-                        let request = cloud::sign_in(&self.ai.server, &self.ai.email, &self.ai.password);
-                        self.save_ai();
-                        self.send_ai(Pending::SignIn, request);
-                    }
-                    if ui.add_enabled(!busy, egui::Button::new(tr("Create account"))).clicked() {
-                        let request = cloud::sign_up(&self.ai.server, &self.ai.email, &self.ai.password);
-                        self.save_ai();
-                        self.send_ai(Pending::SignUp, request);
-                    }
-                });
-            }
+                if ui.add_enabled(!busy, egui::Button::new(tr("Create account"))).clicked() {
+                    let request = cloud::sign_up(&self.ai.server, &self.ai.email, &self.ai.password);
+                    self.save_ai();
+                    self.send_ai(Pending::SignUp, request);
+                }
+            });
         }
         ui.separator();
         ui.label(tr("Features"));
@@ -933,6 +920,31 @@ mod tests {
     }
 
     #[test]
+    fn the_account_window_has_no_own_key_option_and_a_stored_key_is_deleted_on_load() {
+        let shared = Rc::new(RefCell::new(Shared::default()));
+        shared.borrow_mut().secrets.insert(
+            SECRET_KEY.into(),
+            json!({ "consented": true, "email": "me@example.com", "key": "sk-ant-secret", "use_key": true, "token": null }).to_string(),
+        );
+        let mut app = LaserFoundryApp::new(Session::new(), Box::new(Fake(Rc::clone(&shared))));
+        app.open_ai(Window::Account);
+        let kept = shared.borrow().secrets[SECRET_KEY].clone();
+        assert!(
+            !kept.contains("sk-ant-secret") && !kept.contains("use_key") && !kept.contains("\"key\""),
+            "the key is gone from the stored settings: {kept}"
+        );
+        assert!(kept.contains("me@example.com") && kept.contains("\"consented\":true"), "the rest is kept: {kept}");
+        assert!(matches!(&app.ai.note, Some((m, false)) if m == "AI now uses your Foundry Account. Sign in to continue."), "{:?}", app.ai.note);
+        // the window shows no key field or choice
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |ui| app.account_window(ui)).drop_without_applying_deltas();
+        assert!(app.ai.auth().is_err(), "without a sign-in there is no way to pay, key or not");
+        // someone who never used a key sees no such note
+        let (other, _) = app_with(&Rc::new(RefCell::new(Shared::default())));
+        assert!(other.ai.note.is_none());
+    }
+
+    #[test]
     fn signing_in_keeps_the_session_privately_and_reads_the_credits() {
         let (mut app, shared) = app();
         sign_in(&mut app, &shared);
@@ -991,8 +1003,8 @@ mod tests {
         let shared = Rc::new(RefCell::new(Shared::default()));
         let mut app = LaserFoundryApp::new(Session::new(), Box::new(Fake(Rc::clone(&shared))));
         app.open_ai(Window::Ask);
-        app.ai.use_key = true;
-        app.ai.key = "sk-ant-x".into();
+        app.ai.server = "https://c.example".into();
+        app.ai.token = Some("sfs_tok".into());
         app.ai.question = "hello".into();
         app.start_ask();
         assert!(app.ai.awaiting_consent.is_some() && shared.borrow().sent.is_empty(), "nothing is sent before the person agrees");
@@ -1034,19 +1046,19 @@ mod tests {
         app.start_design(false);
         assert!(matches!(&app.ai.note, Some((m, true)) if m.contains("Sign in")), "{:?}", app.ai.note);
         app.ai.prompt.clear();
-        app.ai.use_key = true;
-        app.ai.key = "sk-ant-x".into();
+        sign_in(&mut app, &shared);
+        let signed_in_requests = shared.borrow().sent.len();
         app.start_design(false);
         assert!(matches!(&app.ai.note, Some((m, true)) if m.contains("Describe")), "{:?}", app.ai.note);
         app.start_design(true);
         assert!(matches!(&app.ai.note, Some((m, true)) if m.contains("picture")), "{:?}", app.ai.note);
-        assert!(shared.borrow().sent.is_empty());
-        // one request at a time
+        assert_eq!(shared.borrow().sent.len(), signed_in_requests, "nothing was sent for the refused requests");
+        // one request at a time, and it goes to the account service
         app.ai.prompt = "a fox".into();
         app.start_design(false);
-        assert_eq!(shared.borrow().sent[0].url, laserfoundry_ai::API_URL, "the person's own key goes to Anthropic");
+        assert_eq!(shared.borrow().sent[signed_in_requests].url, "https://c.example/v1/messages", "AI goes to the account service");
         app.start_design(false);
-        assert_eq!(shared.borrow().sent.len(), 1);
+        assert_eq!(shared.borrow().sent.len(), signed_in_requests + 1);
         assert!(matches!(&app.ai.note, Some((m, true)) if m.contains("still running")), "{:?}", app.ai.note);
     }
 
