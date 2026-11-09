@@ -145,8 +145,9 @@ mod web {
                 job.result = None;
             }
             let job = Rc::clone(&self.http_job);
+            let services = self.services;
             spawn_local(async move {
-                let result = if crate::service::post_allowed(&request.url, BUILT_IN_SERVICE, self.services) {
+                let result = if crate::service::post_allowed(&request.url, BUILT_IN_SERVICE, services) {
                     post(&request).await
                 } else {
                     Err("this page can only talk to the service it was built for and to MakerFoundry".to_string())
