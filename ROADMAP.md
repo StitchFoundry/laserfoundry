@@ -1046,6 +1046,11 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   MakerFoundry spec link at the `StitchFoundry` org. App ids (`com.stitchwright.*`) and past ROADMAP entries are unchanged. **Not done:**
   Bruce-only items (DNS `www` CNAME, `ANTHROPIC_API_KEY` secret, published release text). **Not checked:** the new links were not fetched
   from this sandbox; the full gate result is in the pull request's CI.
+- **2026-11-09 — Setup wizard: first-mark test grid (#61).** New wizard step 5, "First mark (optional)": the safety checklist from
+  `docs/hardware-bringup.md` (glasses, fire, known material, stop switch, stay with the machine) must be ticked before a small 3 × 3
+  Material Test Grid (1-10 % power, 1500-4500 mm/min, starting points only) is added to the document; a bed under 48 mm is refused.
+  Nothing is sent to the laser: the person starts the job. Name and save is now step 6. Tests against the simulator (checklist
+  gating, nothing sent, small bed refused). Not verified on real hardware. Still open on #61: Find my laser, several machines, panel docking.
 - **2026-11-07 — Setup wizard: bed-outline check (#61).** New command `machine.bed_outline` returns a program that traces the whole
   bed at S0 (laser off, 1500 mm/min by default; it refuses a bed or speed the G-code writer rejects). The wizard has a new step 4,
   **Bed check**: trace the outline, answer "did the head reach every corner without touching the frame?", and on "No" shrink the bed
@@ -1060,3 +1065,8 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   ways (S max, the S9 Pro's bed, the D1 Pro 20W), are left out. The pages were read through web search results only, not opened
   one by one, so each entry should be checked against its link before a release. Tests: the shipped file (every entry has an https
   source and a finite, positive bed), refusal of bad entries, and the wizard against the simulator. Nothing was run on real hardware.
+- **2026-11-08 — Version 0.3.0 (#73).** The workspace version is 0.3.0 (`Cargo.toml`, both lockfiles, edited by hand because the job could not
+  build), ahead of tagging `v0.3.0`. 0.2.1 was never published, so `docs/releases/v0.3.0.md` covers everything since v0.2.0 (the 0.2.1 items,
+  the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
+  Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
+  pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.

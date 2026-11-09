@@ -26,6 +26,14 @@ const MAX_NAME_CHARS: usize = 80;
 const SHRINK_MM: f64 = 10.0;
 /// The smallest bed side the check will shrink to, in mm.
 const MIN_BED_MM: f64 = 10.0;
+/// The first-mark grid: 3 × 3 cells of this size and gap, in mm, placed this far from the document's top-left corner.
+const MARK_CELL_MM: f64 = 8.0;
+const MARK_GAP_MM: f64 = 2.0;
+const MARK_MARGIN_MM: f64 = 10.0;
+const MARK_CELLS: u32 = 3;
+/// Gentle ranges for a first test on scrap: power in percent, speed in mm/min. Starting points, not tested on a machine.
+const MARK_POWER: (f64, f64) = (1.0, 10.0);
+const MARK_SPEED: (f64, f64) = (1500.0, 4500.0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum Step {
@@ -34,6 +42,7 @@ pub(crate) enum Step {
     Read,
     Direction,
     Bed,
+    Mark,
     Save,
 }
 
@@ -49,6 +58,8 @@ pub(crate) struct Wizard {
     pub bed_ok: Option<bool>,
     /// Index into [`laser_presets::presets`]; `None` is "Other / I don't know".
     pub preset: Option<usize>,
+    /// Whether the safety checklist was ticked; the first-mark grid cannot be made before.
+    pub safety_read: bool,
     pub name: String,
 }
 
@@ -102,6 +113,18 @@ pub(crate) fn flip_x_direction(settings: &BTreeMap<u32, String>) -> Option<f64> 
 pub(crate) fn shrunk_bed(width: f64, height: f64) -> Option<(f64, f64)> {
     let (w, h) = (width - SHRINK_MM, height - SHRINK_MM);
     (width.is_finite() && height.is_finite() && w >= MIN_BED_MM && h >= MIN_BED_MM).then_some((w, h))
+}
+
+/// The parameters of the small first-mark test grid, or `None` when it would not fit on a bed of this size (or the size is not finite).
+pub(crate) fn first_mark_params(bed_width: f64, bed_height: f64, layer: u32) -> Option<Value> {
+    let side = f64::from(MARK_CELLS) * MARK_CELL_MM + f64::from(MARK_CELLS - 1) * MARK_GAP_MM;
+    let needed = side + 2.0 * MARK_MARGIN_MM;
+    (bed_width.is_finite() && bed_height.is_finite() && bed_width >= needed && bed_height >= needed).then(|| {
+        json!({
+            "cols": MARK_CELLS, "rows": MARK_CELLS, "size": MARK_CELL_MM, "gap": MARK_GAP_MM, "x": MARK_MARGIN_MM, "y": MARK_MARGIN_MM,
+            "layer": layer, "speed_min": MARK_SPEED.0, "speed_max": MARK_SPEED.1, "power_min": MARK_POWER.0, "power_max": MARK_POWER.1,
+        })
+    })
 }
 
 /// One word for the machine's state, as shown at the top of the Machine block.
@@ -183,6 +206,25 @@ pub(crate) fn shrink_bed(app: &mut LaserFoundryApp) -> bool {
     changed
 }
 
+/// Adds the small first-mark grid to the document once the safety checklist was ticked. Nothing is sent to the machine: the person
+/// starts the job themselves. Returns whether the grid was added.
+pub(crate) fn add_first_mark(app: &mut LaserFoundryApp) -> bool {
+    if !app.wizard.safety_read {
+        app.status = Some((tr("Read the safety checklist and tick the box first"), true));
+        return false;
+    }
+    let m = &app.session.doc.machine;
+    let Some(params) = first_mark_params(m.bed_width, m.bed_height, app.active_layer) else {
+        app.status = Some((tr("The bed is too small for the test grid: set its size first"), true));
+        return false;
+    };
+    let added = app.run("generate.test_grid", params).is_some();
+    if added {
+        app.view = None;
+    }
+    added
+}
+
 /// Copies the bed size and S max the controller reported into the machine.
 pub(crate) fn apply_controller(app: &mut LaserFoundryApp, c: &Controller) {
     let mut params = Map::new();
@@ -239,6 +281,7 @@ fn body(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         Step::Read => read_step(app, ui),
         Step::Direction => direction_step(app, ui),
         Step::Bed => bed_step(app, ui),
+        Step::Mark => mark_step(app, ui),
         Step::Save => save_step(app, ui),
     }
 }
@@ -440,11 +483,32 @@ fn bed_step(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
             shrink_bed(app);
         }
     }
-    nav(app, ui, Some(Step::Direction), Some((Step::Save, true)));
+    nav(app, ui, Some(Step::Direction), Some((Step::Mark, true)));
+}
+
+fn mark_step(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
+    ui.heading(tr("5. First mark (optional)"));
+    ui.label(tr("Safety first. Tick the box when you have done all of this:"));
+    for line in [
+        "Wear laser safety glasses rated for your laser's wavelength; everyone in the room does.",
+        "Never leave the laser running unattended; keep a fire extinguisher or water within reach.",
+        "Use scrap of a known material (never PVC, vinyl or anything with chlorine), with ventilation.",
+        "Know your machine's emergency stop or power switch. The program's Stop is software only.",
+        "Stay with the machine and press Stop at smoke, flames or a move that looks wrong.",
+    ] {
+        ui.label(format!("•  {}", tr(line)));
+    }
+    ui.checkbox(&mut app.wizard.safety_read, tr("I have done all of this"));
+    ui.add_space(4.0);
+    ui.label(tr("This adds a small 3 × 3 test grid (1–10 % power, slow to medium speed) to the document. Nothing is sent to the laser: start it yourself from the Laser panel, and watch it."));
+    if ui.add_enabled(app.wizard.safety_read, egui::Button::new(tr("Add the test grid to the document"))).clicked() {
+        add_first_mark(app);
+    }
+    nav(app, ui, Some(Step::Bed), Some((Step::Save, true)));
 }
 
 fn save_step(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
-    ui.heading(tr("5. Name and save"));
+    ui.heading(tr("6. Name and save"));
     let m = &app.session.doc.machine;
     let origin = if m.origin == Origin::BottomLeft { tr("bottom-left") } else { tr("top-left") };
     ui.label(trf!("Bed {w} × {h} mm, origin {origin}", w = m.bed_width, h = m.bed_height, origin = origin));
@@ -456,7 +520,7 @@ fn save_step(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         if ui.button(tr("Back")).clicked() {
-            app.wizard.step = Step::Bed;
+            app.wizard.step = Step::Mark;
         }
         if ui.button(tr("Save machine")).clicked() {
             save(app);

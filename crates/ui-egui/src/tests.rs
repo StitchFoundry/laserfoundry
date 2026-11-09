@@ -3593,10 +3593,29 @@ mod setup_tests {
         }
 
         #[test]
+        fn the_first_mark_grid_needs_the_checklist_and_sends_nothing() {
+            let mut h = simulated(&[]);
+            let shapes = h.app.session.doc.shapes.len();
+            assert!(!ms::add_first_mark(&mut h.app), "refused before the checklist is ticked");
+            assert_eq!(h.app.session.doc.shapes.len(), shapes);
+
+            h.app.wizard.safety_read = true;
+            assert!(ms::add_first_mark(&mut h.app));
+            assert!(h.app.session.doc.shapes.len() > shapes, "the grid is in the document");
+            assert!(!h.app.job_active(), "nothing was sent to the controller");
+
+            // A bed too small for the grid is refused.
+            h.app.run("machine.set", json!({"bed_width": 30, "bed_height": 30}));
+            let shapes = h.app.session.doc.shapes.len();
+            assert!(!ms::add_first_mark(&mut h.app));
+            assert_eq!(h.app.session.doc.shapes.len(), shapes);
+        }
+
+        #[test]
         fn the_machine_block_and_the_wizard_draw_while_connected() {
             let mut h = simulated(&[]);
             ms::open(&mut h.app);
-            for step in [ms::Step::Connect, ms::Step::Read, ms::Step::Direction, ms::Step::Bed, ms::Step::Save] {
+            for step in [ms::Step::Connect, ms::Step::Read, ms::Step::Direction, ms::Step::Bed, ms::Step::Mark, ms::Step::Save] {
                 h.app.wizard.step = step;
                 h.frame(vec![]);
                 h.frame(vec![]);
@@ -3663,6 +3682,15 @@ mod setup_tests {
             assert_eq!(ms::shrunk_bed(19.0, 90.0), None);
             assert_eq!(ms::shrunk_bed(f64::NAN, 90.0), None);
             assert_eq!(ms::shrunk_bed(f64::INFINITY, 90.0), None);
+        }
+
+        #[test]
+        fn the_first_mark_grid_fits_the_bed_or_is_refused() {
+            assert!(ms::first_mark_params(48.0, 48.0, 0).is_some());
+            assert!(ms::first_mark_params(300.0, 200.0, 0).is_some());
+            assert!(ms::first_mark_params(47.0, 300.0, 0).is_none());
+            assert!(ms::first_mark_params(f64::NAN, 300.0, 0).is_none());
+            assert!(ms::first_mark_params(300.0, f64::INFINITY, 0).is_none());
         }
 
         #[test]
