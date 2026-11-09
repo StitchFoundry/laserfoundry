@@ -17,6 +17,7 @@ pub mod ask;
 pub mod check;
 pub mod cloud;
 pub mod maker;
+pub mod services;
 
 /// The Messages API endpoint used with a person's own key.
 pub const API_URL: &str = "https://api.anthropic.com/v1/messages";

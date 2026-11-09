@@ -15,6 +15,13 @@ use crate::i18n::{self, tr, trf};
 /// Where the account and key are kept (see [`Platform::secret_set`](crate::Platform::secret_set)).
 const SECRET_KEY: &str = "laserfoundry.ai";
 
+impl LaserFoundryApp {
+    /// Where the account's sign-in is kept: staging has its own place, so tokens never cross between the two services.
+    fn secret_key(&self) -> String {
+        self.platform.services().secret_key(SECRET_KEY)
+    }
+}
+
 /// Which window is open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Window {
@@ -154,9 +161,15 @@ impl LaserFoundryApp {
         if std::mem::replace(&mut self.ai.loaded, true) {
             return;
         }
-        let kept: Option<Value> = self.platform.secret_get(SECRET_KEY).and_then(|t| serde_json::from_str(&t).ok());
+        let kept: Option<Value> = self.platform.secret_get(&self.secret_key()).and_then(|t| serde_json::from_str(&t).ok());
         let text = |k: &str| kept.as_ref().and_then(|v| v.get(k)).and_then(Value::as_str).map(str::to_string);
-        self.ai.server = text("server").unwrap_or_else(|| cloud::built_in_server().to_string());
+        // Staging always uses its compiled-in address, whatever was kept.
+        let staging = self.platform.services() == laserfoundry_ai::services::Services::Staging;
+        self.ai.server = if staging {
+            self.platform.services().cloud().to_string()
+        } else {
+            text("server").unwrap_or_else(|| cloud::built_in_server().to_string())
+        };
         self.ai.email = text("email").unwrap_or_default();
         self.ai.key = text("key").unwrap_or_default();
         self.ai.use_key = kept.as_ref().and_then(|v| v.get("use_key")).and_then(Value::as_bool).unwrap_or(false);
@@ -183,7 +196,7 @@ impl LaserFoundryApp {
             .map(|(_, name)| name)
             .collect();
         let value = json!({ "server": self.ai.server, "email": self.ai.email, "key": self.ai.key, "use_key": self.ai.use_key, "token": self.ai.token, "consented": self.ai.consented, "off": off });
-        self.platform.secret_set(SECRET_KEY, &value.to_string());
+        self.platform.secret_set(&self.secret_key(), &value.to_string());
     }
 
     pub(crate) fn ai_error(&mut self, e: &AiError) {
@@ -569,7 +582,8 @@ impl LaserFoundryApp {
         } else {
             ui.horizontal(|ui| {
                 ui.label(tr("Server"));
-                ui.add(egui::TextEdit::singleline(&mut self.ai.server).desired_width(320.0).hint_text("https://…"));
+                let fixed = self.platform.services() == laserfoundry_ai::services::Services::Staging;
+                ui.add_enabled(!fixed, egui::TextEdit::singleline(&mut self.ai.server).desired_width(320.0).hint_text("https://…"));
             });
             if self.ai.signed_in() {
                 ui.label(trf!("Signed in as {email}", email = self.ai.email));
@@ -830,6 +844,8 @@ mod tests {
         upload: Option<crate::Upload>,
         requested: Vec<Vec<String>>,
         log: Option<PathBuf>,
+        /// Acts like a web tab opened with `?services=staging`.
+        staging: bool,
     }
 
     struct Fake(Rc<RefCell<Shared>>);
@@ -888,6 +904,10 @@ mod tests {
             Some(answer)
         }
 
+        fn services(&self) -> laserfoundry_ai::services::Services {
+            if self.0.borrow().staging { laserfoundry_ai::services::Services::Staging } else { laserfoundry_ai::services::Services::Production }
+        }
+
         fn secret_get(&self, key: &str) -> Option<String> {
             self.0.borrow().secrets.get(key).cloned()
         }
@@ -930,6 +950,34 @@ mod tests {
         app.send_ai(Pending::SignIn, request);
         answer(app, shared, 200, r#"{"token":"sfs_tok","account":{"email":"me@example.com","credits":100}}"#);
         answer(app, shared, 200, r#"{"email":"me@example.com","credits":100,"payments":true,"packs":[{"id":"small","credits":1000,"cents":1000}]}"#);
+    }
+
+    #[test]
+    fn staging_uses_its_own_server_and_sign_in_and_never_touches_the_real_ones() {
+        use laserfoundry_ai::services::{STAGING_CLOUD, STAGING_MAKER};
+        let shared = Rc::new(RefCell::new(Shared { staging: true, ..Shared::default() }));
+        // a real session and a server someone typed earlier are kept under the real key
+        shared.borrow_mut().secrets.insert(
+            SECRET_KEY.into(),
+            json!({ "consented": true, "token": "sfs_real", "server": "https://evil.example", "email": "real@example.com" }).to_string(),
+        );
+        let mut app = LaserFoundryApp::new(Session::new(), Box::new(Fake(Rc::clone(&shared))));
+        app.open_ai(Window::Account);
+        assert_eq!(app.ai.server, STAGING_CLOUD, "the address is the compiled-in one, whatever was kept");
+        assert_eq!(app.ai.token, None, "a real session token is never used against staging");
+        assert!(app.ai.email.is_empty());
+        app.ai.email = "qa@example.com".into();
+        app.ai.password = "pw".into();
+        let request = cloud::sign_in(&app.ai.server, &app.ai.email, &app.ai.password);
+        app.send_ai(Pending::SignIn, request);
+        assert_eq!(shared.borrow().sent[0].url, format!("{STAGING_CLOUD}/v1/signin"));
+        answer(&mut app, &shared, 200, r#"{"token":"sfs_stage","account":{"email":"qa@example.com","credits":5}}"#);
+        let secrets = shared.borrow().secrets.clone();
+        assert!(secrets[SECRET_KEY].contains("sfs_real") && !secrets[SECRET_KEY].contains("sfs_stage"), "the real key is untouched");
+        assert!(secrets[&format!("{SECRET_KEY}.staging")].contains("sfs_stage"));
+        // publishing goes to the staging MakerFoundry
+        app.ai.token = Some("sfs_stage".into());
+        assert_eq!(app.platform.services().maker(), STAGING_MAKER);
     }
 
     #[test]

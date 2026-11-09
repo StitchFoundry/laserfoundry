@@ -1063,3 +1063,12 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
   Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
   pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.
+- **2026-11-09 — issue #69, staging switch for the web app (part 1).** `?services=staging` makes the tab use the staging account service and the
+  staging MakerFoundry, both compiled in (`laserfoundry_ai::services`), shows "STAGING services (test data)" in the status bar, and is remembered
+  for the tab's session only (`?services=production` clears it). Only the exact word counts; no address is ever taken from the URL. Staging keeps
+  its sign-in under its own storage key (a real session token is never sent to staging, nor the reverse), ignores a saved server, locks the Server
+  field, accepts `?open=` links only from the staging MakerFoundry host (and production never accepts that host), and the web host's POST/GET
+  allow-lists and the page's content security policy name the two hosts. Checked with unit tests (mode choice, exact hosts and look-alikes,
+  allow-lists both ways, own sign-in key, banner, addresses). **Not done:** accessible names for the Publish Name field and Send button (the
+  canvas UI has no accessibility tree in the web build; needs the `accesskit` feature of eframe, a separate change); the Import file chooser
+  already works with Playwright's file-chooser event. Not run in a real browser or against the staging services.

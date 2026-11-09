@@ -61,7 +61,7 @@ impl LaserFoundryApp {
     }
 
     fn open_from_link(&mut self, value: &str) {
-        match maker::open_link(value) {
+        match maker::open_link_in(self.platform.services(), value) {
             Err(e) => self.open_failed(&e),
             // the address fetched is the checked one, never the text that came in
             Ok(link) if self.platform.start_fetch(&link.url, maker::MAX_OPEN_BYTES) => {
@@ -139,7 +139,7 @@ impl LaserFoundryApp {
             Some(file) => ui.weak(trf!(
                 "It is sent as {name} (an SVG with your layers' colours) to {server}. The name becomes the draft's title; you can change it on MakerFoundry.",
                 name = file,
-                server = maker::DEFAULT_SERVER
+                server = self.platform.services().maker()
             )),
             None => ui.weak(tr("Give the design a name first: it becomes the draft's title on MakerFoundry.")),
         };
@@ -178,12 +178,12 @@ impl LaserFoundryApp {
         let Some(svg) = exported["svg"].as_str() else { return };
         let file = laserfoundry_doc::base64::encode(svg.as_bytes());
         let app = format!("LaserFoundry {}", env!("CARGO_PKG_VERSION"));
-        let request = maker::publish(maker::DEFAULT_SERVER, &token, &name, &file, &app);
+        let request = maker::publish(self.platform.services().maker(), &token, &name, &file, &app);
         self.send_ai(Pending::Publish, request);
     }
 
     pub(crate) fn publish_answered(&mut self, status: u16, body: &str) {
-        match maker::read_published(maker::DEFAULT_SERVER, status, body) {
+        match maker::read_published(self.platform.services().maker(), status, body) {
             Ok(draft) => {
                 // the person's browser opens the draft's page (checked to be on MakerFoundry)
                 self.pending_url = Some(draft.url);

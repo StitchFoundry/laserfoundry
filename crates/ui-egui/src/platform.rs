@@ -150,6 +150,12 @@ pub trait Platform {
         None
     }
 
+    /// Which services the app talks to: the real ones, or the staging pair a test run asked for (the web app's
+    /// `?services=staging`). Desktop hosts always use the real ones.
+    fn services(&self) -> laserfoundry_ai::services::Services {
+        laserfoundry_ai::services::Services::Production
+    }
+
     /// The address a page was opened to show a design from (the web app's `?open=` value, decoded once), taken once at
     /// start. The host also drops it from the page's address, so a reload does not fetch it again. Desktop hosts have none.
     fn startup_link(&self) -> Option<String> {
