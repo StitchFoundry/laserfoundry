@@ -1046,6 +1046,11 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   MakerFoundry spec link at the `StitchFoundry` org. App ids (`com.stitchwright.*`) and past ROADMAP entries are unchanged. **Not done:**
   Bruce-only items (DNS `www` CNAME, `ANTHROPIC_API_KEY` secret, published release text). **Not checked:** the new links were not fetched
   from this sandbox; the full gate result is in the pull request's CI.
+- **2026-11-09 — Setup wizard: first-mark test grid (#61).** New wizard step 5, "First mark (optional)": the safety checklist from
+  `docs/hardware-bringup.md` (glasses, fire, known material, stop switch, stay with the machine) must be ticked before a small 3 × 3
+  Material Test Grid (1-10 % power, 1500-4500 mm/min, starting points only) is added to the document; a bed under 48 mm is refused.
+  Nothing is sent to the laser: the person starts the job. Name and save is now step 6. Tests against the simulator (checklist
+  gating, nothing sent, small bed refused). Not verified on real hardware. Still open on #61: Find my laser, several machines, panel docking.
 - **2026-11-07 — Setup wizard: bed-outline check (#61).** New command `machine.bed_outline` returns a program that traces the whole
   bed at S0 (laser off, 1500 mm/min by default; it refuses a bed or speed the G-code writer rejects). The wizard has a new step 4,
   **Bed check**: trace the outline, answer "did the head reach every corner without touching the frame?", and on "No" shrink the bed
