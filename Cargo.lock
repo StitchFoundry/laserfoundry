@@ -1970,6 +1970,7 @@ dependencies = [
  "kurbo",
  "laserfoundry-doc",
  "laserfoundry-geom",
+ "roxmltree 0.21.2",
  "thiserror 2.0.21",
  "usvg",
 ]

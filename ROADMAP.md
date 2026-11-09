@@ -1063,3 +1063,12 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
   Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
   pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.
+- **2026-11-09 — issue #68, SVG text in the web app.** With no installed fonts (a browser), `usvg` drops every `<text>`. The SVG importer now
+  swaps each `<text>` for a placeholder shape that keeps its place in the transform tree, then draws it through a `TextOutliner` the host gives
+  it; the engine's outliner uses the library fonts already loaded for the Text tool (Arial/Helvetica/sans-serif go to a held font with "sans" in
+  its name, Times/serif to "serif", Courier/monospace to "mono", a family named like a held font to that font, anything else to the first held
+  font). `file.import_svg` now returns `text_outlined`, `text_substituted`, `text_dropped` and a `note` saying how many text items used a stand-in
+  or could not be drawn, instead of dropping them silently. Checked with unit tests (anchor, group transforms, tspans, hostile markup, stand-in
+  and dropped counts, the library-font mapping) and the engine registry test. **Not done:** editable text objects from `<text>` (optional in the
+  issue); bold/italic are not synthesised; `dx`/`dy`/`rotate` and `textPath` are ignored; the browser build was not run in a real browser here,
+  and the library fonts are only loaded after "Install fonts" on the web, so a first import before that reports the text as not drawn.
