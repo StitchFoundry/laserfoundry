@@ -624,10 +624,8 @@ fn resume_controls(app: &mut LaserFoundryApp, ui: &mut egui::Ui, gcode: &str, li
             .add_enabled(enabled, egui::Button::new(tr("Start here")))
             .on_hover_text(tr("Moves the laser to where it would be at that line with the beam off, then carries on. The origin must already be set the way the first run had it."))
             .clicked()
-            && let Some(v) = app.run("job.resume", json!({ "line": app.resume_line, "include": true }))
-            && let Some(text) = v["gcode"].as_str()
         {
-            app.start_job(text.to_string());
+            app.start_from_line(app.resume_line);
         }
     });
     if let Some(l) = gcode.lines().nth(app.resume_line.saturating_sub(1)) {

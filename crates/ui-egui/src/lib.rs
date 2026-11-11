@@ -86,6 +86,32 @@ struct Reconnect {
     next: Instant,
 }
 
+/// Where a job started part-way ("Start here") was cut from, so its place can be saved in the design's own program.
+#[derive(Clone)]
+struct Restart {
+    /// The design's full program.
+    program: std::sync::Arc<str>,
+    /// The 1-based line of `program` the restarted job began at.
+    from: usize,
+}
+
+impl Restart {
+    /// The place in the design's program for 1-based `line` of the restarted program (`total` lines long). The restarted
+    /// program is a short header (beam off, move into place) followed by the design's lines from `from` on; a line in the header
+    /// is the restart line itself. Should the header be miscounted the place comes out earlier, never later.
+    fn place_in_design(&self, line: usize, total: usize) -> job_position::JobPosition {
+        let design_total = self.program.lines().count();
+        let from = self.from.clamp(1, design_total.max(1));
+        let header = total.saturating_sub(design_total - from + 1);
+        let place = if line <= header { from } else { from.saturating_add(line - header - 1) };
+        job_position::JobPosition {
+            hash: job_position::fingerprint(&self.program),
+            line: place.clamp(1, design_total.max(1)),
+            total_lines: design_total.max(1),
+        }
+    }
+}
+
 pub struct LaserFoundryApp {
     pub session: Session,
     platform: Box<dyn Platform>,
@@ -211,13 +237,15 @@ pub struct LaserFoundryApp {
     resume_line: usize,
     /// The program of the job being run, kept to work out where to restart it if it is interrupted.
     job_program: Option<std::sync::Arc<str>>,
+    /// When the running job was started part-way ("Start here"): the design's program and the line it started from.
+    job_restart: Option<Restart>,
     last_position_write: Instant,
     /// A job a previous session left unfinished, found at startup.
     interrupted: Option<job_position::JobPosition>,
     /// What a requested upload is for.
     awaiting_upload: Option<UploadKind>,
     /// A program waiting for the person to confirm a start the bed cannot be checked for (relative start).
-    pending_start: Option<String>,
+    pending_start: Option<(String, Option<Restart>)>,
     ai: ai_ui::AiState,
     maker: maker_ui::MakerState,
     /// A web address to open in the browser at the next frame (a payment page).
@@ -405,6 +433,7 @@ impl LaserFoundryApp {
             template_name: String::new(),
             resume_line: 1,
             job_program: None,
+            job_restart: None,
             last_position_write: Instant::now(),
             interrupted,
             awaiting_upload: None,
@@ -934,10 +963,10 @@ impl LaserFoundryApp {
                 });
             });
             if let Some(go) = answer
-                && let Some(program) = self.pending_start.take()
+                && let Some((program, restart)) = self.pending_start.take()
                 && go
             {
-                self.begin_job(program);
+                self.begin_job(program, restart);
             }
             return;
         }
@@ -1173,6 +1202,11 @@ impl LaserFoundryApp {
     }
 
     pub(crate) fn start_job(&mut self, program: String) {
+        self.start_job_with(program, None);
+    }
+
+    /// Starts `program`; `restart` says which program and line it was cut from when it is a restart.
+    fn start_job_with(&mut self, program: String, restart: Option<Restart>) {
         let Some(link) = &self.link else {
             self.status = Some((tr("Connect to a machine (or the simulator) first"), true));
             return;
@@ -1202,20 +1236,33 @@ impl LaserFoundryApp {
         // From the head's position or a user origin the job's place on the bed is not known to the program, so
         // the bed cannot be checked: make the person confirm.
         if self.session.doc.job_origin.start_from != laserfoundry_doc::StartFrom::Absolute && !self.relative_start_trusted {
-            self.pending_start = Some(program);
+            self.pending_start = Some((program, restart));
             return;
         }
-        self.begin_job(program);
+        self.begin_job(program, restart);
+    }
+
+    /// Starts the job part-way through, at 1-based `line` of the design's program (the Laser panel's "Start here").
+    pub(crate) fn start_from_line(&mut self, line: usize) {
+        // The full program is generated first so its place can be saved if the restarted job stops too.
+        self.run("job.gcode", serde_json::json!({}));
+        let Some(original) = self.session.last_gcode.clone() else { return };
+        if let Some(v) = self.run("job.resume", serde_json::json!({ "line": line, "include": true }))
+            && let Some(text) = v["gcode"].as_str()
+        {
+            self.start_job_with(text.to_string(), Some(Restart { program: original.as_str().into(), from: line }));
+        }
     }
 
     /// Hands the program to the machine link.
-    pub(crate) fn begin_job(&mut self, program: String) {
+    pub(crate) fn begin_job(&mut self, program: String, restart: Option<Restart>) {
         let Some(link) = &self.link else { return };
         let kept: std::sync::Arc<str> = program.as_str().into();
         if let Err(e) = link.start_job(program) {
             self.status = Some((i18n::tr_message(&e.to_string()), true));
         } else {
             self.job_program = Some(kept);
+            self.job_restart = restart;
             self.forget_interrupted();
         }
     }
@@ -1231,10 +1278,16 @@ impl LaserFoundryApp {
     /// Keeps the saved job position current while a job runs, and removes it when the job ends cleanly.
     fn record_job_position(&mut self, snap: &Snapshot) {
         let Some(path) = self.platform.job_position_file() else { return };
+        let restart = self.job_restart.clone();
         let write = |program: &str, acknowledged: usize| {
             let total = program.lines().count();
             let line = laserfoundry_device::restart_line(program, acknowledged).min(total.max(1));
-            job_position::save(&path, &job_position::JobPosition { hash: job_position::fingerprint(program), line, total_lines: total });
+            // A restarted job is saved as a place in the design's program: that is the program offered again later.
+            let pos = match &restart {
+                Some(r) => r.place_in_design(line, total),
+                None => job_position::JobPosition { hash: job_position::fingerprint(program), line, total_lines: total },
+            };
+            job_position::save(&path, &pos);
         };
         match &snap.job {
             JobState::Running | JobState::Paused => {
@@ -1245,11 +1298,13 @@ impl LaserFoundryApp {
                 }
             }
             JobState::Finished(Ok(_)) => {
+                self.job_restart = None;
                 if self.job_program.take().is_some() {
                     job_position::clear(&path);
                 }
             }
             JobState::Finished(Err(_)) => {
+                self.job_restart = None;
                 if let (Some(program), Some(p)) = (self.job_program.take(), snap.progress)
                     && p.acknowledged > 0
                 {

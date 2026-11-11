@@ -1063,3 +1063,9 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
   Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
   pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.
+- **2026-11-11 — A restarted job that stops again saves its place in the design's program (#90).** A job started with
+  **Start here** (`job.resume`) that was interrupted again saved its line and fingerprint from the restarted program, so the next
+  "A job was interrupted" offer could never be used, and typing its line by hand pointed earlier in the design (re-burning work). The
+  app now remembers the program and line a job was restarted from and saves the place in the design's program (header lines map to
+  the restart line; any miscount errs earlier). Regression test fails without the fix. Nightly sweep: no `needs-triage` issues; full
+  `cargo xtask ci` green on main (after `rustup target add wasm32-unknown-unknown`, #43); `cargo audit` clean but the 3 known zbus warnings.
