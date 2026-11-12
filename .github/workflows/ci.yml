@@ -22,6 +22,13 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Linux libraries
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-x11-0 libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+        run: |
+          # Ubuntu-host DNS outage 2026-11-11: on GitHub's x64 Ubuntu runners, try mirrors.kernel.org first, then Azure.
+          if [ -f /etc/apt/apt-mirrors.txt ] && [ "$(dpkg --print-architecture)" = amd64 ]; then
+            printf "http://mirrors.kernel.org/ubuntu/\nhttp://azure.archive.ubuntu.com/ubuntu/\n" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+            sudo sed -i -E "s#https?://(security|archive|azure\.archive)\.ubuntu\.com/ubuntu#http://mirrors.kernel.org/ubuntu#g" /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true
+          fi
+          for i in 1 2 3; do sudo apt-get -o Acquire::Retries=3 update && break; sleep 20; done
+          sudo apt-get -o Acquire::Retries=3 install -y libxkbcommon-x11-0 libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
       - name: The quality gate
         run: cargo xtask ci
