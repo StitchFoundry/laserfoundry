@@ -15,6 +15,12 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-12 — Camera support, part 1: the maths (#86).** New crate `laserfoundry-camera` (layer 0, in the browser build): fisheye lens
+  model with undistort/distort, 4-point bed homography, per-camera profile JSON (size-capped, finite-checked), alignment-cross positions,
+  checkerboard SVG. Tests: placement error <= 0.5 mm over a 400 x 400 mm bed on a synthetic projective + lens transform, round trips,
+  hostile input; fuzz entry `camera_profile` (mutation test + `fuzz/` target). `docs/camera.md` started. **Not done:** capture (web and
+  native), the checkerboard intrinsics solver, burn-and-click flow and commands, overlay, manual checklist. **Not checked:** real camera
+  or hardware. (There is no PROGRESS.md; this log is the progress file.)
 - **2026-10-13 — M0.** Workspace scaffolded on the VectorCraft/CADCraft conventions. Geometry,
   document model, toolpath planner (ordering, scan fill, dithered raster), GRBL G-code generator,
   SVG/DXF/image import, native file format, GRBL streamer with simulator and optional serial

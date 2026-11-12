@@ -10,6 +10,7 @@ workspace = true
 
 [dependencies]
 laserfoundry-engine = { workspace = true }
+laserfoundry-camera = { workspace = true }
 laserfoundry-svg = { workspace = true }
 laserfoundry-dxf = { workspace = true }
 laserfoundry-format = { workspace = true }
