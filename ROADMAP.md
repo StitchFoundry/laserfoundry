@@ -1058,6 +1058,13 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   simulator (trace, shrink, a bed already tiny). **Not done:** first-mark test grid, Find my laser, presets. **Not checked:** the
   full gate was not run in this job (the pull request's CI is the check), nothing was run on real hardware, and the step was not
   looked at on screen.
+- **2026-11-08 — Setup wizard: "Pick your laser" presets (#61).** Step 1 of the wizard has an optional list of common GRBL diode
+  lasers (`crates/ui-egui/data/laser-presets.json`, loaded by `laser_presets.rs`): bed size and, where the maker states it, optical
+  power, each with a link to the maker's own product page and the words "from the spec sheet, not tested". "Use these values" sets the
+  bed and offers the model as the machine name; "Other / I don't know" changes nothing. Values the pages did not state, or stated two
+  ways (S max, the S9 Pro's bed, the D1 Pro 20W), are left out. The pages were read through web search results only, not opened
+  one by one, so each entry should be checked against its link before a release. Tests: the shipped file (every entry has an https
+  source and a finite, positive bed), refusal of bad entries, and the wizard against the simulator. Nothing was run on real hardware.
 - **2026-11-08 — Version 0.3.0 (#73).** The workspace version is 0.3.0 (`Cargo.toml`, both lockfiles, edited by hand because the job could not
   build), ahead of tagging `v0.3.0`. 0.2.1 was never published, so `docs/releases/v0.3.0.md` covers everything since v0.2.0 (the 0.2.1 items,
   the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
