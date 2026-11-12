@@ -13,6 +13,7 @@ pub mod service;
 #[cfg(target_arch = "wasm32")]
 mod web {
     use eframe::wasm_bindgen::JsCast;
+    use laserfoundry_ai::services::Services;
     use laserfoundry_engine::Session;
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
@@ -49,6 +50,7 @@ mod web {
                                 leave_warning,
                                 http_job: Rc::new(RefCell::new(HttpJob::default())),
                                 link: RefCell::new(take_open_link()),
+                                services: read_services(),
                                 fetch_job: Rc::new(RefCell::new(FetchJob::default())),
                             }),
                         ),
@@ -89,6 +91,8 @@ mod web {
         http_job: Rc<RefCell<HttpJob>>,
         /// The design address the page was opened with (`?open=`), until the app has taken it.
         link: RefCell<Option<String>>,
+        /// The real services, or the staging pair this tab was asked to use (`?services=staging`).
+        services: Services,
         /// The design being fetched from a link (or its answer, not yet taken).
         fetch_job: Rc<RefCell<FetchJob>>,
     }
@@ -141,8 +145,9 @@ mod web {
                 job.result = None;
             }
             let job = Rc::clone(&self.http_job);
+            let services = self.services;
             spawn_local(async move {
-                let result = if crate::service::post_allowed(&request.url, BUILT_IN_SERVICE) {
+                let result = if crate::service::post_allowed(&request.url, BUILT_IN_SERVICE, services) {
                     post(&request).await
                 } else {
                     Err("this page can only talk to the service it was built for and to MakerFoundry".to_string())
@@ -156,6 +161,10 @@ mod web {
 
         fn take_http(&self) -> Option<Result<(u16, String), String>> {
             self.http_job.borrow_mut().result.take()
+        }
+
+        fn services(&self) -> Services {
+            self.services
         }
 
         fn startup_link(&self) -> Option<String> {
@@ -173,8 +182,9 @@ mod web {
             }
             let job = Rc::clone(&self.fetch_job);
             let url = url.to_string();
+            let services = self.services;
             spawn_local(async move {
-                let result = if crate::service::fetch_allowed(&url) {
+                let result = if crate::service::fetch_allowed(&url, services) {
                     get(&url, max_bytes).await
                 } else {
                     Err("this page only fetches designs from MakerFoundry".to_string())
@@ -489,6 +499,25 @@ mod web {
     struct FetchJob {
         running: bool,
         result: Option<Result<Fetched, String>>,
+    }
+
+    /// The tab's services: `?services=` and what this tab remembered (session storage, so only this tab, only for now).
+    fn read_services() -> Services {
+        const KEY: &str = "laserfoundry.services";
+        let window = web_sys::window();
+        let query = window
+            .as_ref()
+            .and_then(|w| w.location().search().ok())
+            .and_then(|q| web_sys::UrlSearchParams::new_with_str(&q).ok())
+            .and_then(|p| p.get("services"));
+        let storage = window.as_ref().and_then(|w| w.session_storage().ok()).flatten();
+        let remembered = storage.as_ref().and_then(|s| s.get_item(KEY).ok()).flatten();
+        let (services, remember) = crate::service::choose_services(query.as_deref(), remembered.as_deref());
+        if let (Some(storage), Some(on)) = (storage, remember) {
+            // storage can throw (blocked site data): the choice then lasts until the next reload only
+            let _ = if on { storage.set_item(KEY, "staging") } else { storage.remove_item(KEY) };
+        }
+        services
     }
 
     /// Reads the design address the page was opened with (`?open=`) and takes it out of the page's address, so reloading the

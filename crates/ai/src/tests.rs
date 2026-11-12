@@ -356,6 +356,24 @@ mod maker_tests {
         use super::*;
 
         #[test]
+        fn staging_opens_only_from_the_staging_host_and_production_never_does() {
+            use crate::services::{STAGING_MAKER_HOST, Services};
+            let staging = format!("https://{STAGING_MAKER_HOST}/api/v1/designs/9/file/a.svg");
+            assert_eq!(maker::open_link_in(Services::Staging, &staging).unwrap().url, staging);
+            assert!(maker::open_link(&staging).is_err() && maker::open_link_in(Services::Production, &staging).is_err());
+            for bad in [
+                "https://makerfoundry.app/api/v1/designs/1/file/a.svg",
+                &format!("https://{STAGING_MAKER_HOST}.evil.com/api/v1/designs/1/file/a.svg"),
+                &format!("https://{STAGING_MAKER_HOST}@evil.com/api/v1/designs/1/file/a.svg"),
+                &format!("https://evil-{STAGING_MAKER_HOST}/api/v1/designs/1/file/a.svg"),
+                &format!("http://{STAGING_MAKER_HOST}/api/v1/designs/1/file/a.svg"),
+                &format!("https://{STAGING_MAKER_HOST}:8443/api/v1/designs/1/file/a.svg"),
+            ] {
+                assert!(maker::open_link_in(Services::Staging, bad).is_err(), "{bad}");
+            }
+        }
+
+        #[test]
         fn a_design_file_on_makerfoundry_is_accepted_and_named() {
             let link = maker::open_link("https://makerfoundry.app/api/v1/designs/42/file/rose.svg").unwrap();
             assert_eq!(link.url, "https://makerfoundry.app/api/v1/designs/42/file/rose.svg");

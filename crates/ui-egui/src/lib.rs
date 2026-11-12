@@ -1408,6 +1408,10 @@ impl LaserFoundryApp {
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
+        if let Some(banner) = self.platform.services().banner() {
+            // Test runs only: makes it plain that nothing here is real.
+            ui.colored_label(self.tokens.error, banner);
+        }
         ui.horizontal(|ui| match &self.status {
             Some((text, true)) => {
                 ui.colored_label(self.tokens.error, text);
