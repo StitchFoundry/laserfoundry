@@ -1,0 +1,14 @@
+{
+  "note": "Bed sizes and optical power as each maker publishes them on its own product page (read 2026-11-08). Model names are here only to say what the program works with. Nothing here was tested on the machines. A value a maker's page did not state, or stated two different ways, is left out.",
+  "presets": [
+    { "name": "xTool D1 Pro 10W", "bed_width": 430, "bed_height": 400, "optical_watts": 10, "source": "https://au.xtool.com/products/xtool-d1-pro-desktop-laser-engraver-cutting-machine" },
+    { "name": "Creality Falcon2 22W", "bed_width": 400, "bed_height": 415, "optical_watts": 22, "source": "https://www.creality.com/products/creality-falcon2-22w" },
+    { "name": "Ortur Laser Master 3 (10W module)", "bed_width": 400, "bed_height": 400, "optical_watts": 10, "source": "https://ortur.net/products/ortur-laser-master-3-engraver-cutter-machine" },
+    { "name": "Ortur Laser Master 3 LE 5W", "bed_width": 400, "bed_height": 400, "optical_watts": 5, "source": "https://ortur.net/products/ortur-laser-master-3-lite" },
+    { "name": "Sculpfun S9", "bed_width": 410, "bed_height": 415, "source": "https://eu.sculpfun.com/en-eu/products/sculpfun-s9-laser-engraver" },
+    { "name": "AtomStack A5 Pro", "bed_width": 410, "bed_height": 400, "source": "https://atomstack.com/products/atomstack-a5-pro" },
+    { "name": "TwoTrees TTS-10 Pro", "bed_width": 300, "bed_height": 300, "optical_watts": 10, "source": "https://twotrees3d.com/products/tts-10-pro-diode-laser-engraver-twotrees" },
+    { "name": "NEJE 3 Max V2", "bed_width": 750, "bed_height": 460, "optical_watts": 24, "source": "https://neje.shop/products/neje-3-max-a40640" },
+    { "name": "Longer Laser B1", "bed_width": 450, "bed_height": 440, "source": "https://www.longer3d.com/products/longer-laser-b1-40w-44-48w-output-power" }
+  ]
+}

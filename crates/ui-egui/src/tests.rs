@@ -3624,6 +3624,42 @@ mod setup_tests {
         }
     }
 
+    mod presets {
+        use super::*;
+
+        #[test]
+        fn picking_a_laser_shows_its_numbers_and_using_them_sets_the_bed_and_name() {
+            let mut h = simulated(&[]);
+            ms::open(&mut h.app);
+            let list = crate::laser_presets::presets();
+            let i = list
+                .iter()
+                .position(|p| p.bed_width != h.app.session.doc.machine.bed_width || p.bed_height != h.app.session.doc.machine.bed_height)
+                .expect("a preset that differs from the default bed");
+            h.app.wizard.preset = Some(i);
+            h.frame(vec![]);
+            h.frame(vec![]);
+            ms::apply_preset(&mut h.app, &list[i].clone());
+            let m = &h.app.session.doc.machine;
+            assert_eq!((m.bed_width, m.bed_height), (list[i].bed_width, list[i].bed_height));
+            assert_eq!(h.app.wizard.name, list[i].name);
+        }
+
+        #[test]
+        fn other_leaves_the_machine_alone_and_a_stale_index_draws_without_crashing() {
+            let mut h = simulated(&[]);
+            ms::open(&mut h.app);
+            let before = (h.app.session.doc.machine.bed_width, h.app.session.doc.machine.bed_height);
+            h.app.wizard.preset = None;
+            h.frame(vec![]);
+            assert_eq!((h.app.session.doc.machine.bed_width, h.app.session.doc.machine.bed_height), before);
+            h.app.wizard.preset = Some(10_000);
+            h.frame(vec![]);
+            h.frame(vec![]);
+            assert!(h.app.wizard.open);
+        }
+    }
+
     mod helpers {
         use super::*;
 
