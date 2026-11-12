@@ -1074,3 +1074,8 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   program's `M3`/`M4` line (at S0) even when the skipped part had already sent `M5`, so resuming from the footer left the laser enabled
   with nothing to turn it off. `M5` now clears the remembered spindle line. Test: `resuming_after_the_laser_was_switched_off_does_not_switch_it_on_again`
   (fails without the fix). Nightly sweep: full gate green on main before the change, no needs-triage issues. **Not checked:** real hardware.
+- **2026-11-12 — Fix #93: Audit green again (`rustix` 1.1.5 -> 1.1.6).** `cargo audit --deny unsound` (the `audit.yml` check) failed on
+  main once RUSTSEC-2026-0486 (unsound xattr helpers in `rustix` 1.1.5, reached only through `winit -> calloop -> polling`; we never call
+  them) reached the advisory database. `Cargo.lock` now pins the patched 1.1.6; no new crates. Checked: `cargo audit --deny unsound --deny
+  yanked` passes (3 known unmaintained warnings remain), full gate green. `fuzz/Cargo.lock` is stale with other advisories: #94.
+  Nightly sweep: no needs-triage issues, full gate green on main before the change.
