@@ -14,6 +14,7 @@ repository = "https://github.com/StitchFoundry/laserfoundry"
 [workspace.dependencies]
 # internal
 laserfoundry-geom = { path = "crates/geom" }
+laserfoundry-camera = { path = "crates/camera" }
 laserfoundry-i18n = { path = "crates/i18n" }
 laserfoundry-fontlib = { path = "crates/fontlib" }
 laserfoundry-ai = { path = "crates/ai" }

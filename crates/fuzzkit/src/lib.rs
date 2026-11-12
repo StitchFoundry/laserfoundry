@@ -8,6 +8,16 @@ use laserfoundry_engine::{Session, commands};
 use serde_json::Value;
 
 /// Untrusted SVG text.
+/// Camera profile import (JSON from a file the user picked), then the maths on whatever it holds.
+pub fn camera_profile(data: &[u8]) {
+    if let Ok(text) = std::str::from_utf8(data)
+        && let Ok(p) = laserfoundry_camera::CameraProfile::from_json(text)
+    {
+        let _ = p.pixel_to_bed(100.0, 100.0);
+        let _ = p.pixel_to_bed(1e9, -1e9);
+    }
+}
+
 pub fn svg(data: &[u8]) {
     let _ = laserfoundry_svg::import_svg(data);
 }
@@ -316,6 +326,15 @@ mod tests {
     fn controller_lines_and_programs_survive_mutation() {
         drive(STATUS, controller_line, 3000);
         drive(GCODE, gcode_program, 1500);
+    }
+
+    #[test]
+    fn camera_profiles_survive_mutation() {
+        let lens = laserfoundry_camera::Lens { fx: 700.0, fy: 700.0, cx: 960.0, cy: 540.0, k1: -0.05, k2: 0.01 };
+        let h = laserfoundry_camera::Homography([2.0, 0.0, 1.0, 0.0, 2.0, 1.0, 0.0, 0.0, 1.0]);
+        let p =
+            laserfoundry_camera::CameraProfile { vendor_id: 1, product_id: 2, width: 1920, height: 1080, lens, bed: Some(h), machine: "m".into() };
+        drive(&p.to_json(), camera_profile, 3000);
     }
 
     #[test]
