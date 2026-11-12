@@ -44,6 +44,7 @@ a path needs between {minimum} and {MAX_NODES} nodes
 a preset needs a name
 a preview sample is at most {MAX_PREVIEW_CHARS} characters
 a test grid has 1 to {MAX_COLS_ROWS} columns and rows and at most {MAX_CELLS} cells
+a value is not a finite number
 an array may add at most {MAX_NEW_SHAPES} shapes
 an array must make between 1 and {MAX_COPIES} copies
 an open path needs a positive offset distance (it becomes the outline around the line)
@@ -155,6 +156,7 @@ the font file is too large
 the font library is larger than this program will download; refusing
 the font library listing is not what was expected: {0}
 the font registry is unavailable
+the four points do not form a usable quadrilateral (some are repeated or in a line)
 the image file is too large
 the job is {w}×{h} mm, larger than the {bw}×{bh} mm work area
 the library font {path} is not loaded; download the font library first
@@ -167,9 +169,11 @@ the picture has no ink to trace (it is all paper-white)
 the picture is too large
 the picture is too large to send
 the preview height is 1 to 100 mm
+the profile is invalid: {0}
 the program has {total} lines; line {line} does not exist
 the program is too long to resume
 the result is empty (the shapes do not overlap that way)
+the size is out of range
 the text and the path must be different shapes
 the two marks are too close together to give a direction
 there is no node {0} in that sub-path
