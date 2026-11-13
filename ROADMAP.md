@@ -15,6 +15,12 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-13 — Web serial: close the port on disconnect (issue #100, slice A).** Dropping the browser transport (disconnect, lost
+  connection, failed handshake) now cancels the reader, closes the writer, releases both locks and calls `port.close()`; a failed
+  connect after `open` closes the port too. The order lives in `serial_close` (native unit tests: order, partial locks, close once,
+  fresh connection closes again). **Not checked:** real Chrome/hardware (the job could not build or run code; CI runs the gate).
+  Slices B (getPorts reuse), C (alarm banner), D (DTR/RTS) are not done.
+
 - **2026-11-12 — Camera support, part 1: the maths (#86).** New crate `laserfoundry-camera` (layer 0, in the browser build): fisheye lens
   model with undistort/distort, 4-point bed homography, per-camera profile JSON (size-capped, finite-checked), alignment-cross positions,
   checkerboard SVG. Tests: placement error <= 0.5 mm over a 400 x 400 mm bed on a synthetic projective + lens transform, round trips,
