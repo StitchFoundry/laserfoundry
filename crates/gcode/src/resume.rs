@@ -131,7 +131,11 @@ fn track(st: &mut State, raw: &str) -> Option<()> {
         "M3" | "M4" => st.spindle_line = Some(code.to_string()),
         "M8" => st.air = true,
         "M9" => st.air = false,
-        "M5" => st.s = Some(0.0),
+        "M5" => {
+            // The laser is off from here: a resume after this point must not switch it on again.
+            st.s = Some(0.0);
+            st.spindle_line = None;
+        }
         _ => {}
     }
     if first == "G92" {
@@ -223,6 +227,15 @@ mod tests {
         let p = PROGRAM.replace("M4 S0", "M3 S0");
         let r = resume_from(&p, 11).unwrap();
         assert!(r.contains("\nM3 S0\n") && !r.contains("M4"), "{r}");
+    }
+
+    #[test]
+    fn resuming_after_the_laser_was_switched_off_does_not_switch_it_on_again() {
+        // Line 15 (`G0 X0 Y0`) follows the program's `M5`: the resumed part must not start with `M4 S0`,
+        // which would leave the laser enabled after the job with nothing to turn it off.
+        let r = resume_from(PROGRAM, 15).unwrap();
+        assert!(!r.contains("M4") && !r.contains("M3"), "{r}");
+        assert!(r.ends_with("G0 X0 Y0\n"), "{r}");
     }
 
     #[test]

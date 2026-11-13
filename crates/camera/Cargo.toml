@@ -1,0 +1,14 @@
+[package]
+name = "laserfoundry-camera"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LaserFoundry camera maths: lens model, bed homography, calibration target"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
