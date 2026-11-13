@@ -58,3 +58,62 @@ pub fn clear() {
 pub(crate) fn get(name: &str) -> Option<Arc<GlyphFont>> {
     registry().lock().ok()?.get(name).cloned()
 }
+
+/// Draws SVG `<text>` with the library fonts held in memory, for hosts with no font files (the browser).
+/// A requested family is matched to a held font by name; the generic families and the common office
+/// ones (Arial, Helvetica, Times, Courier…) go to the closest held font (`sans`, `serif`, `mono` in its
+/// name), and anything else to the first font held, which is reported as a stand-in.
+pub(crate) struct LibraryTextOutliner;
+
+/// Cap height as a fraction of the font size (typical for text faces).
+const CAP_HEIGHT_PER_EM: f64 = 0.72;
+/// CSS pixels (96 per inch) to millimetres.
+const MM_PER_PX: f64 = 25.4 / 96.0;
+
+impl laserfoundry_svg::TextOutliner for LibraryTextOutliner {
+    fn outline(&self, request: &laserfoundry_svg::TextRequest) -> Option<laserfoundry_svg::TextOutline> {
+        use kurbo::{Affine, Shape};
+        let held: Vec<(String, Arc<GlyphFont>)> = registry().lock().ok()?.iter().map(|(k, f)| (k.clone(), f.clone())).collect();
+        let (font, substituted) = pick(&held, &request.families)?;
+        let height = (request.size_px * CAP_HEIGHT_PER_EM * MM_PER_PX).clamp(laserfoundry_text::MIN_HEIGHT_MM, laserfoundry_text::MAX_HEIGHT_MM);
+        let style = laserfoundry_text::TextStyle { height, ..Default::default() };
+        let layout = laserfoundry_text::layout_glyph_font(&font, &request.text.replace('\n', " "), &style).ok()?;
+        let mut path = layout.path;
+        let bounds = path.bounding_box();
+        if !(bounds.x1.is_finite() && bounds.x1 >= 0.0) {
+            return None;
+        }
+        // The layout puts the top of the capitals at y = 0 (baseline at y = height); SVG text sits with its baseline at y = 0.
+        path.apply_affine(Affine::scale(1.0 / MM_PER_PX) * Affine::translate((0.0, -height)));
+        Some(laserfoundry_svg::TextOutline { path, advance_px: bounds.x1 / MM_PER_PX, substituted })
+    }
+}
+
+/// The held font for the first family that has a match; `true` when none did and the first held font stands in.
+fn pick(held: &[(String, Arc<GlyphFont>)], families: &[String]) -> Option<(Arc<GlyphFont>, bool)> {
+    let key = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
+    let label = |(name, font): &(String, Arc<GlyphFont>)| key(&format!("{} {}", name.trim_start_matches(PREFIX), font.name));
+    for family in families {
+        let wanted = key(family);
+        if wanted.is_empty() {
+            continue;
+        }
+        if let Some(f) = held.iter().find(|h| label(h).contains(&wanted)) {
+            return Some((f.1.clone(), false));
+        }
+        let hint = match wanted.as_str() {
+            "monospace" | "courier" | "couriernew" | "consolas" | "menlo" | "monaco" => "mono",
+            "serif" | "times" | "timesnewroman" | "georgia" | "garamond" | "palatino" | "cambria" => "serif",
+            "sansserif" | "arial" | "helvetica" | "verdana" | "tahoma" | "calibri" | "segoeui" | "trebuchetms" | "system" | "systemui" => "sans",
+            _ => continue,
+        };
+        let found = held.iter().find(|h| {
+            let l = label(h);
+            l.contains(hint) && (hint != "serif" || !l.contains("sans"))
+        });
+        if let Some(f) = found {
+            return Some((f.1.clone(), false));
+        }
+    }
+    held.first().map(|f| (f.1.clone(), true))
+}

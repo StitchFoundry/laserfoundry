@@ -1104,6 +1104,15 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   allow-lists both ways, own sign-in key, banner, addresses). **Not done:** accessible names for the Publish Name field and Send button (the
   canvas UI has no accessibility tree in the web build; needs the `accesskit` feature of eframe, a separate change); the Import file chooser
   already works with Playwright's file-chooser event. Not run in a real browser or against the staging services.
+- **2026-11-09 — issue #68, SVG text in the web app.** With no installed fonts (a browser), `usvg` drops every `<text>`. The SVG importer now
+  swaps each `<text>` for a placeholder shape that keeps its place in the transform tree, then draws it through a `TextOutliner` the host gives
+  it; the engine's outliner uses the library fonts already loaded for the Text tool (Arial/Helvetica/sans-serif go to a held font with "sans" in
+  its name, Times/serif to "serif", Courier/monospace to "mono", a family named like a held font to that font, anything else to the first held
+  font). `file.import_svg` now returns `text_outlined`, `text_substituted`, `text_dropped` and a `note` saying how many text items used a stand-in
+  or could not be drawn, instead of dropping them silently. Checked with unit tests (anchor, group transforms, tspans, hostile markup, stand-in
+  and dropped counts, the library-font mapping) and the engine registry test. **Not done:** editable text objects from `<text>` (optional in the
+  issue); bold/italic are not synthesised; `dx`/`dy`/`rotate` and `textPath` are ignored; the browser build was not run in a real browser here,
+  and the library fonts are only loaded after "Install fonts" on the web, so a first import before that reports the text as not drawn.
 - **2026-11-09 — issue #67, no "use my own API key".** The account window has no own-key checkbox or key field, the payer row and consent
   dialog no longer mention one, and every AI request goes through the Foundry Account (credits). A key kept by an earlier version is
   deleted from the stored settings when they load (written back without `key`/`use_key`), and a person who relied on it sees "AI now uses your

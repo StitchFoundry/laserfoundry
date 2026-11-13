@@ -195,7 +195,8 @@ fn import_svg(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     let p: ImportParams = parse(params)?;
     finite(&[p.x, p.y])?;
     let bytes = source_bytes(&p)?;
-    let svg = laserfoundry_svg::import_svg(&bytes).map_err(|e| EngineError::Import(e.to_string()))?;
+    let svg =
+        laserfoundry_svg::import_svg_with_text(&bytes, Some(&crate::fontlib::LibraryTextOutliner)).map_err(|e| EngineError::Import(e.to_string()))?;
     let mut ids = Vec::new();
     for ip in svg.paths {
         let layer = if p.layer_by_color { ip.color.as_deref().map_or(0, layer_for_color) } else { 0 };
@@ -223,7 +224,26 @@ fn import_svg(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
         ids.push(s.doc.add_shape(shape));
     }
     s.selection = ids.clone();
-    Ok(json!({ "ids": ids, "width_mm": svg.width_mm, "height_mm": svg.height_mm, "skipped_images": skipped_images }))
+    let note = text_note(svg.text_substituted, svg.text_dropped);
+    Ok(json!({
+        "ids": ids, "width_mm": svg.width_mm, "height_mm": svg.height_mm, "skipped_images": skipped_images,
+        "text_outlined": svg.text_outlined, "text_substituted": svg.text_substituted, "text_dropped": svg.text_dropped, "note": note,
+    }))
+}
+
+/// What to tell the person about SVG text that was not drawn as the file asked (`None` when all of it was).
+pub(crate) fn text_note(substituted: usize, dropped: usize) -> Option<String> {
+    let items = |n: usize| if n == 1 { "1 text item".to_string() } else { format!("{n} text items") };
+    match (substituted, dropped) {
+        (0, 0) => None,
+        (s, 0) => Some(format!("{} used a font LaserFoundry doesn't have and was drawn in a stand-in font.", items(s))),
+        (0, d) => Some(format!("{} could not be drawn: no font is available. Load the font library, or convert the text to paths first.", items(d))),
+        (s, d) => Some(format!(
+            "{} used a font LaserFoundry doesn't have and was drawn in a stand-in font; {} could not be drawn (no font is available).",
+            items(s),
+            items(d)
+        )),
+    }
 }
 
 /// Chains the open shapes among `ids` (per layer) into longer paths, replacing them in `ids`.

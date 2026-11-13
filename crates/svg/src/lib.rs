@@ -54,6 +54,38 @@ pub struct SvgImport {
     pub height_mm: f64,
     pub paths: Vec<ImportedPath>,
     pub images: Vec<ImportedImage>,
+    /// `<text>` items drawn by the caller's [`TextOutliner`] (the machine has no font files, as in a browser).
+    pub text_outlined: usize,
+    /// Of those, the items drawn in a stand-in because the requested font was not available.
+    pub text_substituted: usize,
+    /// `<text>` items with words that could not be drawn at all (no font anywhere).
+    pub text_dropped: usize,
+}
+
+/// What a text outliner is asked to draw: one run of text in one style.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextRequest {
+    pub text: String,
+    /// The `font-family` list, in order of preference (generic names like `sans-serif` included).
+    pub families: Vec<String>,
+    pub bold: bool,
+    pub italic: bool,
+    /// The font size in CSS pixels.
+    pub size_px: f64,
+}
+
+/// The outline of one run: in CSS pixels, y down, origin at the left end of the baseline.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextOutline {
+    pub path: BezPath,
+    pub advance_px: f64,
+    /// True when none of the requested families was available and a stand-in was used.
+    pub substituted: bool,
+}
+
+/// Draws text where `usvg` cannot (no font files, as in a browser). Returns `None` when it has no font at all.
+pub trait TextOutliner {
+    fn outline(&self, request: &TextRequest) -> Option<TextOutline>;
 }
 
 /// Cap on imported pictures and on the bytes they may add up to.
@@ -61,6 +93,22 @@ pub const MAX_IMAGES: usize = 64;
 pub const MAX_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 
 pub fn import_svg(data: &[u8]) -> Result<SvgImport, SvgError> {
+    import_svg_with_text(data, None)
+}
+
+/// Like [`import_svg`]; text `usvg` could not draw (no fonts) is drawn by `outliner` when one is given, and counted
+/// in the result either way.
+pub fn import_svg_with_text(data: &[u8], outliner: Option<&dyn TextOutliner>) -> Result<SvgImport, SvgError> {
+    import_inner(data, outliner, true)
+}
+
+/// Like [`import_svg_with_text`] but never reads the machine's installed fonts, so the result is the same on every
+/// machine (what a browser sees). For tests.
+pub fn import_svg_without_system_fonts(data: &[u8], outliner: Option<&dyn TextOutliner>) -> Result<SvgImport, SvgError> {
+    import_inner(data, outliner, false)
+}
+
+fn import_inner(data: &[u8], outliner: Option<&dyn TextOutliner>, system_fonts: bool) -> Result<SvgImport, SvgError> {
     if data.len() > MAX_SVG_BYTES {
         return Err(SvgError::TooLarge);
     }
@@ -69,18 +117,34 @@ pub fn import_svg(data: &[u8]) -> Result<SvgImport, SvgError> {
     }
     let mut options = usvg::Options::default();
     // Installed fonts are only looked up when the file has text to draw (loading them takes a while).
-    if data.windows(5).any(|w| w == b"<text") {
+    if system_fonts && data.windows(5).any(|w| w == b"<text") {
         load_system_fonts(&mut options);
+    }
+    // No fonts at all (a browser): `usvg` drops every <text>, so each one is swapped for a placeholder shape that keeps
+    // its place in the transform tree, and drawn afterwards with the caller's outliner.
+    let mut texts = Vec::new();
+    let replaced;
+    let mut data = data;
+    if options.fontdb.is_empty()
+        && data.windows(5).any(|w| w == b"<text")
+        && let Some((svg, found)) = swap_text_for_placeholders(data)
+    {
+        replaced = svg;
+        data = replaced.as_slice();
+        texts = found;
     }
     let tree = usvg::Tree::from_data(data, &options).map_err(|e| SvgError::Parse(e.to_string()))?;
     let size = tree.size();
-    let mut found = Found::default();
+    let mut found = Found { outliner, texts, ..Found::default() };
     collect(tree.root(), &mut found);
     Ok(SvgImport {
         width_mm: f64::from(size.width()) * MM_PER_PX,
         height_mm: f64::from(size.height()) * MM_PER_PX,
         paths: found.paths,
         images: found.images,
+        text_outlined: found.text_outlined,
+        text_substituted: found.text_substituted,
+        text_dropped: found.text_dropped,
     })
 }
 
@@ -107,10 +171,185 @@ fn load_system_fonts(options: &mut usvg::Options<'_>) {
 fn load_system_fonts(_: &mut usvg::Options<'_>) {}
 
 #[derive(Default)]
-struct Found {
+struct Found<'a> {
     paths: Vec<ImportedPath>,
     images: Vec<ImportedImage>,
     image_bytes: usize,
+    outliner: Option<&'a dyn TextOutliner>,
+    texts: Vec<TextChunk>,
+    text_outlined: usize,
+    text_substituted: usize,
+    text_dropped: usize,
+}
+
+/// Ids of the shapes that stand in for `<text>` while `usvg` reads the file.
+const PLACEHOLDER: &str = "lf-text-";
+/// Most text runs taken from one file (each is laid out separately).
+const MAX_TEXT_CHUNKS: usize = 5_000;
+
+/// One piece of text that starts at a point: its runs (each in one style) and how it hangs on the point.
+#[derive(Debug, Clone)]
+struct TextChunk {
+    x: f64,
+    y: f64,
+    /// -1 start, 0 middle, 1 end.
+    anchor: i8,
+    runs: Vec<(TextRequest, Option<String>)>,
+}
+
+/// Value of a presentation property on an element or the nearest ancestor that sets it (`style` wins over the attribute).
+fn inherited(node: roxmltree::Node<'_, '_>, name: &str) -> Option<String> {
+    for n in node.ancestors().filter(|n| n.is_element()) {
+        let from_style = n
+            .attribute("style")
+            .and_then(|st| st.split(';').filter_map(|d| d.split_once(':')).find(|(k, _)| k.trim() == name).map(|(_, v)| v.trim().to_string()));
+        if let Some(v) = from_style.or_else(|| n.attribute(name).map(|v| v.trim().to_string())) {
+            return Some(v);
+        }
+    }
+    None
+}
+
+/// The first number of a coordinate list (`"10 20"`, `"5px"`); other units are not worked out.
+fn first_number(v: &str) -> Option<f64> {
+    let t = v.split(|c: char| c == ',' || c.is_whitespace()).find(|p| !p.is_empty())?;
+    let (num, unit) = match t.find(|c: char| c.is_ascii_alphabetic() || c == '%') {
+        Some(i) => t.split_at(i),
+        None => (t, ""),
+    };
+    let n: f64 = num.parse().ok()?;
+    let scale = match unit {
+        "" | "px" => 1.0,
+        "pt" => 4.0 / 3.0,
+        "mm" => 96.0 / 25.4,
+        "cm" => 96.0 / 2.54,
+        "in" => 96.0,
+        _ => return None,
+    };
+    (n * scale).is_finite().then_some(n * scale)
+}
+
+/// Finds the `<text>` elements, returns the file with each replaced by placeholder shapes (one per chunk of text, same
+/// `transform`, so ancestors' transforms still apply) and the chunks, indexed by placeholder number.
+fn swap_text_for_placeholders(data: &[u8]) -> Option<(Vec<u8>, Vec<TextChunk>)> {
+    let src = std::str::from_utf8(data).ok()?;
+    let doc = roxmltree::Document::parse(src).ok()?;
+    let is_text = |n: &roxmltree::Node| n.is_element() && n.tag_name().name() == "text";
+    let mut chunks: Vec<TextChunk> = Vec::new();
+    let mut out = Vec::with_capacity(data.len());
+    let mut at = 0usize;
+    for el in doc.descendants().filter(|n| is_text(n) && !n.ancestors().skip(1).any(|a| is_text(&a))) {
+        let range = el.range();
+        if range.start < at || chunks.len() >= MAX_TEXT_CHUNKS {
+            continue;
+        }
+        let first = chunks.len();
+        text_chunks(el, &mut chunks);
+        out.extend_from_slice(src.get(at..range.start)?.as_bytes());
+        let transform = el.attribute("transform").unwrap_or("");
+        for i in first..chunks.len() {
+            out.extend_from_slice(
+                format!(r#"<rect id="{PLACEHOLDER}{i}" width="1" height="1" transform="{}"/>"#, transform.replace('"', "")).as_bytes(),
+            );
+        }
+        at = range.end;
+    }
+    out.extend_from_slice(src.get(at..)?.as_bytes());
+    (!chunks.is_empty()).then_some((out, chunks))
+}
+
+/// Splits one `<text>` element into chunks: a new one starts wherever an element sets `x` or `y`.
+fn text_chunks(text_el: roxmltree::Node<'_, '_>, chunks: &mut Vec<TextChunk>) {
+    let mut started: Vec<roxmltree::NodeId> = Vec::new();
+    for node in text_el.descendants().filter(|n| n.is_text()) {
+        let Some(parent) = node.parent_element() else { continue };
+        let Some(piece) = node.text().map(|t| t.split_whitespace().collect::<Vec<_>>().join(" ")) else { continue };
+        if piece.is_empty() {
+            continue;
+        }
+        // Between this text and the <text> element: the nearest element with a new position starts a chunk.
+        let chain: Vec<_> = parent.ancestors().take_while(|a| a.is_element()).take_while(|a| *a != text_el).chain(std::iter::once(text_el)).collect();
+        let mut new_start = false;
+        for a in &chain {
+            if (a.has_attribute("x") || a.has_attribute("y")) && !started.contains(&a.id()) {
+                started.push(a.id());
+                new_start = true;
+            }
+        }
+        if new_start || chunks.is_empty() || chunks.last().is_none_or(|c| c.runs.is_empty()) {
+            let find = |name: &str| chain.iter().find_map(|a| a.attribute(name)).and_then(first_number).unwrap_or(0.0);
+            let anchor = match inherited(parent, "text-anchor").as_deref() {
+                Some("middle") => 0,
+                Some("end") => 1,
+                _ => -1,
+            };
+            chunks.push(TextChunk { x: find("x"), y: find("y"), anchor, runs: Vec::new() });
+        }
+        let families = inherited(parent, "font-family")
+            .map(|f| f.split(',').map(|n| n.trim().trim_matches(|c| c == '"' || c == '\'').to_string()).filter(|n| !n.is_empty()).collect())
+            .unwrap_or_default();
+        let weight = inherited(parent, "font-weight").unwrap_or_default();
+        let request = TextRequest {
+            text: piece,
+            families,
+            bold: weight == "bold" || weight == "bolder" || weight.parse::<u32>().is_ok_and(|w| w >= 600),
+            italic: matches!(inherited(parent, "font-style").as_deref(), Some("italic" | "oblique")),
+            size_px: inherited(parent, "font-size").and_then(|v| first_number(&v)).filter(|s| *s > 0.0).unwrap_or(16.0),
+        };
+        let color = inherited(parent, "fill").and_then(|f| usvg_hex(&f));
+        if let Some(last) = chunks.last_mut() {
+            last.runs.push((request, color));
+        }
+    }
+}
+
+/// `#rgb` / `#rrggbb` as `#rrggbb`; anything else (names, `none`, urls) gives `None`.
+fn usvg_hex(v: &str) -> Option<String> {
+    let h = v.strip_prefix('#')?;
+    match h.len() {
+        6 if h.chars().all(|c| c.is_ascii_hexdigit()) => Some(format!("#{}", h.to_lowercase())),
+        3 if h.chars().all(|c| c.is_ascii_hexdigit()) => Some(format!("#{}", h.chars().flat_map(|c| [c, c]).collect::<String>().to_lowercase())),
+        _ => None,
+    }
+}
+
+/// Draws the text a placeholder stands for, where the placeholder sits.
+fn place_text(p: &usvg::Path, found: &mut Found) {
+    let Some(chunk) = p.id().strip_prefix(PLACEHOLDER).and_then(|n| n.parse::<usize>().ok()).and_then(|n| found.texts.get(n)).cloned() else {
+        return;
+    };
+    let ts = p.abs_transform();
+    let m = Affine::new([ts.sx as f64, ts.ky as f64, ts.kx as f64, ts.sy as f64, ts.tx as f64, ts.ty as f64]);
+    let mut drawn: Vec<(BezPath, f64, Option<String>)> = Vec::new();
+    let (mut width, mut substituted) = (0.0, false);
+    if let Some(outliner) = found.outliner {
+        for (request, color) in &chunk.runs {
+            let Some(out) = outliner.outline(request) else { continue };
+            if !(out.advance_px.is_finite() && out.advance_px >= 0.0) {
+                continue;
+            }
+            substituted |= out.substituted;
+            drawn.push((out.path, width, color.clone()));
+            width += out.advance_px;
+        }
+    }
+    if drawn.is_empty() {
+        found.text_dropped += 1;
+        return;
+    }
+    let x0 = chunk.x + (f64::from(chunk.anchor) + 1.0) * -width / 2.0;
+    for (mut path, offset, color) in drawn {
+        if found.paths.len() >= MAX_PATHS {
+            return;
+        }
+        path.apply_affine(Affine::scale(MM_PER_PX) * m * Affine::translate((x0 + offset, chunk.y)));
+        let name = format!("text {}", found.paths.len() + 1);
+        found.paths.push(ImportedPath { name, path, color, filled: true });
+    }
+    found.text_outlined += 1;
+    if substituted {
+        found.text_substituted += 1;
+    }
 }
 
 fn collect(group: &usvg::Group, found: &mut Found) {
@@ -145,6 +384,7 @@ fn collect(group: &usvg::Group, found: &mut Found) {
                     transform,
                 });
             }
+            usvg::Node::Path(p) if p.id().starts_with(PLACEHOLDER) => place_text(p, found),
             usvg::Node::Path(p) => {
                 let ts = p.abs_transform();
                 let m = Affine::new([ts.sx as f64, ts.ky as f64, ts.kx as f64, ts.sy as f64, ts.tx as f64, ts.ty as f64]);
@@ -190,6 +430,86 @@ mod tests {
         <rect x="10" y="20" width="30" height="40" fill="none" stroke="#ff0000"/>
         <g transform="translate(48 0)"><circle cx="20" cy="20" r="10" fill="#0000ff"/></g>
     </svg>"##;
+
+    struct BoxOutliner(Option<f64>);
+    impl TextOutliner for BoxOutliner {
+        fn outline(&self, r: &TextRequest) -> Option<TextOutline> {
+            let w = self.0? * r.text.chars().count() as f64;
+            let mut path = BezPath::new();
+            path.move_to((0.0, 0.0));
+            path.line_to((w, 0.0));
+            path.line_to((w, -r.size_px));
+            path.line_to((0.0, -r.size_px));
+            path.close_path();
+            Some(TextOutline { path, advance_px: w, substituted: r.families.iter().any(|f| f == "Nope") })
+        }
+    }
+
+    const TEXT_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><text x="100" y="50" font-family="Arial" font-weight="bold" font-size="20" text-anchor="middle" fill="#ff0000">Hi</text></svg>"##;
+
+    #[test]
+    fn text_with_no_fonts_is_drawn_by_the_outliner_where_the_anchor_puts_it() {
+        let out = import_svg_without_system_fonts(TEXT_SVG.as_bytes(), Some(&BoxOutliner(Some(10.0)))).unwrap();
+        assert_eq!((out.text_outlined, out.text_substituted, out.text_dropped), (1, 0, 0));
+        assert_eq!(out.paths.len(), 1);
+        let b = bounds_of_polylines(&flatten(&out.paths[0].path, 0.01)).unwrap();
+        // "Hi" is 20 px wide, centred on x = 100 px; the baseline is y = 50 px and the box is 20 px tall.
+        let mm = 25.4 / 96.0;
+        assert!((b.x0 - 90.0 * mm).abs() < 1e-6 && (b.x1 - 110.0 * mm).abs() < 1e-6, "{b:?}");
+        assert!((b.y1 - 50.0 * mm).abs() < 1e-6 && (b.y0 - 30.0 * mm).abs() < 1e-6, "{b:?}");
+        assert_eq!(out.paths[0].color.as_deref(), Some("#ff0000"));
+    }
+
+    #[test]
+    fn text_that_cannot_be_drawn_is_counted_not_silently_lost() {
+        for outliner in [None, Some(&BoxOutliner(None) as &dyn TextOutliner)] {
+            let out = import_svg_without_system_fonts(TEXT_SVG.as_bytes(), outliner).unwrap();
+            assert_eq!((out.text_outlined, out.text_dropped), (0, 1));
+            assert!(out.paths.is_empty());
+        }
+        let blank = r#"<svg xmlns="http://www.w3.org/2000/svg"><text x="1" y="1">   </text></svg>"#;
+        assert_eq!(
+            import_svg_without_system_fonts(blank.as_bytes(), None).unwrap().text_dropped,
+            0,
+            "a text element with no words is nothing to report"
+        );
+    }
+
+    #[test]
+    fn text_follows_group_transforms_and_each_positioned_tspan_is_its_own_line() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><g transform="translate(96 0)" font-family="Arial" font-size="10">
+            <text x="0" y="20" transform="translate(0 10)">One<tspan x="0" y="40" fill="#00f">Two</tspan><tspan font-size="20"> more</tspan></text></g></svg>"##;
+        let out = import_svg_without_system_fonts(svg.as_bytes(), Some(&BoxOutliner(Some(2.0)))).unwrap();
+        assert_eq!((out.text_outlined, out.text_dropped), (2, 0), "two chunks: the first line, and the tspan that sets its own position");
+        let mm = 25.4 / 96.0;
+        let first = bounds_of_polylines(&flatten(&out.paths[0].path, 0.01)).unwrap();
+        // The group moves it 96 px right, the text's own transform 10 px down; baseline at y = 20 + 10 = 30 px.
+        assert!((first.x0 - 96.0 * mm).abs() < 1e-6 && (first.y1 - 30.0 * mm).abs() < 1e-6, "{first:?}");
+        assert_eq!(out.paths[1].color.as_deref(), Some("#0000ff"));
+        let second = bounds_of_polylines(&flatten(&out.paths[1].path, 0.01)).unwrap();
+        assert!((second.y1 - 50.0 * mm).abs() < 1e-6, "{second:?}");
+        assert_eq!(out.paths.len(), 3, "the unpositioned tspan continues the second line as another run");
+    }
+
+    #[test]
+    fn hostile_text_markup_is_bounded_and_never_panics() {
+        let many = format!(r#"<svg xmlns="http://www.w3.org/2000/svg">{}</svg>"#, r#"<text x="1" y="1">a</text>"#.repeat(MAX_TEXT_CHUNKS + 50));
+        let _ = import_svg_without_system_fonts(many.as_bytes(), Some(&BoxOutliner(Some(1.0))));
+        for bad in [
+            r#"<svg xmlns="http://www.w3.org/2000/svg"><text x="NaN" y="1e999" font-size="-5" transform="rotate(">q</text></svg>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg"><text><text>nested</text></text></svg>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg"><text font-size="1e999">x</text></svg>"#,
+        ] {
+            let _ = import_svg_without_system_fonts(bad.as_bytes(), Some(&BoxOutliner(Some(1.0))));
+        }
+    }
+
+    #[test]
+    fn a_stand_in_font_is_reported() {
+        let svg = TEXT_SVG.replace("Arial", "Nope");
+        let out = import_svg_without_system_fonts(svg.as_bytes(), Some(&BoxOutliner(Some(5.0)))).unwrap();
+        assert_eq!((out.text_outlined, out.text_substituted), (1, 1));
+    }
 
     #[test]
     fn a_file_full_of_text_is_refused_before_it_is_laid_out() {
