@@ -8,6 +8,7 @@
 
 pub mod fontindex;
 mod page;
+pub mod serial_close;
 pub mod service;
 
 #[cfg(target_arch = "wasm32")]
