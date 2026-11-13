@@ -12,8 +12,10 @@ const TARGET: &str = "wasm32-unknown-unknown";
 const PREFIX: &str = "laserfoundry-";
 
 /// Package names (without the `laserfoundry-` prefix) the browser build contains.
-pub const WASM: &[&str] =
-    &["geom", "doc", "pathops", "nest", "toolpath", "text", "svg", "dxf", "gcode", "format", "device", "i18n", "ai", "engine", "ui-egui", "web"];
+pub const WASM: &[&str] = &[
+    "geom", "camera", "doc", "pathops", "nest", "toolpath", "text", "svg", "dxf", "gcode", "format", "device", "i18n", "ai", "engine", "ui-egui",
+    "web",
+];
 
 /// Packages that never run in the browser, and why.
 pub const NATIVE_ONLY: &[&str] = &[

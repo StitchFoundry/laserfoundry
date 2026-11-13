@@ -15,6 +15,12 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-12 — Camera support, part 1: the maths (#86).** New crate `laserfoundry-camera` (layer 0, in the browser build): fisheye lens
+  model with undistort/distort, 4-point bed homography, per-camera profile JSON (size-capped, finite-checked), alignment-cross positions,
+  checkerboard SVG. Tests: placement error <= 0.5 mm over a 400 x 400 mm bed on a synthetic projective + lens transform, round trips,
+  hostile input; fuzz entry `camera_profile` (mutation test + `fuzz/` target). `docs/camera.md` started. **Not done:** capture (web and
+  native), the checkerboard intrinsics solver, burn-and-click flow and commands, overlay, manual checklist. **Not checked:** real camera
+  or hardware. (There is no PROGRESS.md; this log is the progress file.)
 - **2026-10-13 — M0.** Workspace scaffolded on the VectorCraft/CADCraft conventions. Geometry,
   document model, toolpath planner (ordering, scan fill, dithered raster), GRBL G-code generator,
   SVG/DXF/image import, native file format, GRBL streamer with simulator and optional serial
@@ -1058,11 +1064,36 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   simulator (trace, shrink, a bed already tiny). **Not done:** first-mark test grid, Find my laser, presets. **Not checked:** the
   full gate was not run in this job (the pull request's CI is the check), nothing was run on real hardware, and the step was not
   looked at on screen.
+- **2026-11-08 — Setup wizard: "Pick your laser" presets (#61).** Step 1 of the wizard has an optional list of common GRBL diode
+  lasers (`crates/ui-egui/data/laser-presets.json`, loaded by `laser_presets.rs`): bed size and, where the maker states it, optical
+  power, each with a link to the maker's own product page and the words "from the spec sheet, not tested". "Use these values" sets the
+  bed and offers the model as the machine name; "Other / I don't know" changes nothing. Values the pages did not state, or stated two
+  ways (S max, the S9 Pro's bed, the D1 Pro 20W), are left out. The pages were read through web search results only, not opened
+  one by one, so each entry should be checked against its link before a release. Tests: the shipped file (every entry has an https
+  source and a finite, positive bed), refusal of bad entries, and the wizard against the simulator. Nothing was run on real hardware.
 - **2026-11-08 — Version 0.3.0 (#73).** The workspace version is 0.3.0 (`Cargo.toml`, both lockfiles, edited by hand because the job could not
   build), ahead of tagging `v0.3.0`. 0.2.1 was never published, so `docs/releases/v0.3.0.md` covers everything since v0.2.0 (the 0.2.1 items,
   the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
   Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
   pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.
+- **2026-11-08 — Fix #76: resuming after the program's `M5` no longer switches the laser back on.** `resume_from` replayed the
+  program's `M3`/`M4` line (at S0) even when the skipped part had already sent `M5`, so resuming from the footer left the laser enabled
+  with nothing to turn it off. `M5` now clears the remembered spindle line. Test: `resuming_after_the_laser_was_switched_off_does_not_switch_it_on_again`
+  (fails without the fix). Nightly sweep: full gate green on main before the change, no needs-triage issues. **Not checked:** real hardware.
+- **2026-11-12 — Fix #93: Audit green again (`rustix` 1.1.5 -> 1.1.6).** `cargo audit --deny unsound` (the `audit.yml` check) failed on
+  main once RUSTSEC-2026-0486 (unsound xattr helpers in `rustix` 1.1.5, reached only through `winit -> calloop -> polling`; we never call
+  them) reached the advisory database. `Cargo.lock` now pins the patched 1.1.6; no new crates. Checked: `cargo audit --deny unsound --deny
+  yanked` passes (3 known unmaintained warnings remain), full gate green. `fuzz/Cargo.lock` is stale with other advisories: #94.
+  Nightly sweep: no needs-triage issues, full gate green on main before the change.
+- **2026-11-09 — issue #69, staging switch for the web app (part 1).** `?services=staging` makes the tab use the staging account service and the
+  staging MakerFoundry, both compiled in (`laserfoundry_ai::services`), shows "STAGING services (test data)" in the status bar, and is remembered
+  for the tab's session only (`?services=production` clears it). Only the exact word counts; no address is ever taken from the URL. Staging keeps
+  its sign-in under its own storage key (a real session token is never sent to staging, nor the reverse), ignores a saved server, locks the Server
+  field, accepts `?open=` links only from the staging MakerFoundry host (and production never accepts that host), and the web host's POST/GET
+  allow-lists and the page's content security policy name the two hosts. Checked with unit tests (mode choice, exact hosts and look-alikes,
+  allow-lists both ways, own sign-in key, banner, addresses). **Not done:** accessible names for the Publish Name field and Send button (the
+  canvas UI has no accessibility tree in the web build; needs the `accesskit` feature of eframe, a separate change); the Import file chooser
+  already works with Playwright's file-chooser event. Not run in a real browser or against the staging services.
 - **2026-11-09 — issue #68, SVG text in the web app.** With no installed fonts (a browser), `usvg` drops every `<text>`. The SVG importer now
   swaps each `<text>` for a placeholder shape that keeps its place in the transform tree, then draws it through a `TextOutliner` the host gives
   it; the engine's outliner uses the library fonts already loaded for the Text tool (Arial/Helvetica/sans-serif go to a held font with "sans" in
