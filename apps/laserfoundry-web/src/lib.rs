@@ -8,6 +8,7 @@
 
 pub mod fontindex;
 mod page;
+pub mod serial_close;
 pub mod service;
 
 #[cfg(target_arch = "wasm32")]
@@ -18,6 +19,7 @@ mod web {
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
+    use crate::serial_close::{CloseStep, Held, Teardown};
     use laserfoundry_device::Transport;
     use laserfoundry_ui_egui::{Fetched, FontDownload, FontDownloadFailure, LaserFoundryApp, Platform, Upload};
     use wasm_bindgen::prelude::*;
@@ -337,24 +339,34 @@ mod web {
         type SerialPort;
         #[wasm_bindgen(method, js_name = open)]
         fn open(this: &SerialPort, options: &JsValue) -> js_sys::Promise;
+        #[wasm_bindgen(method, js_name = close)]
+        fn close(this: &SerialPort) -> js_sys::Promise;
         #[wasm_bindgen(method, getter)]
         fn readable(this: &SerialPort) -> Stream;
         #[wasm_bindgen(method, getter)]
         fn writable(this: &SerialPort) -> Stream;
 
         type Stream;
-        #[wasm_bindgen(method, js_name = getReader)]
-        fn get_reader(this: &Stream) -> Reader;
-        #[wasm_bindgen(method, js_name = getWriter)]
-        fn get_writer(this: &Stream) -> Writer;
+        #[wasm_bindgen(method, js_name = getReader, catch)]
+        fn get_reader(this: &Stream) -> Result<Reader, JsValue>;
+        #[wasm_bindgen(method, js_name = getWriter, catch)]
+        fn get_writer(this: &Stream) -> Result<Writer, JsValue>;
 
         type Reader;
         #[wasm_bindgen(method)]
         fn read(this: &Reader) -> js_sys::Promise;
+        #[wasm_bindgen(method)]
+        fn cancel(this: &Reader) -> js_sys::Promise;
+        #[wasm_bindgen(method, js_name = releaseLock)]
+        fn release_lock(this: &Reader);
 
         type Writer;
         #[wasm_bindgen(method)]
         fn write(this: &Writer, chunk: &JsValue) -> js_sys::Promise;
+        #[wasm_bindgen(method)]
+        fn close(this: &Writer) -> js_sys::Promise;
+        #[wasm_bindgen(method, js_name = releaseLock)]
+        fn release_lock(this: &Writer);
     }
 
     /// GRBL's usual speed.
@@ -379,12 +391,29 @@ mod web {
         let options = js_sys::Object::new();
         js_sys::Reflect::set(&options, &JsValue::from_str("baudRate"), &JsValue::from_f64(BAUD))?;
         JsFuture::from(port.open(&options)).await?;
+        // From here the port is open: any failure below must close it again or the next Connect cannot open it.
+        let port = Rc::new(port);
+        let reader = match port.readable().get_reader() {
+            Ok(reader) => Rc::new(reader),
+            Err(e) => {
+                close_port_steps(&port, None, None, Teardown::default().steps(Held::default())).await;
+                return Err(e);
+            }
+        };
+        let writer = match port.writable().get_writer() {
+            Ok(writer) => Rc::new(writer),
+            Err(e) => {
+                let steps = Teardown::default().steps(Held { reader: true, writer: false });
+                close_port_steps(&port, Some(&*reader), None, steps).await;
+                return Err(e);
+            }
+        };
         let inbox = Rc::new(RefCell::new(Inbox::default()));
-        let reader = port.readable().get_reader();
+        let task_reader = Rc::clone(&reader);
         let reading = Rc::clone(&inbox);
         spawn_local(async move {
             loop {
-                let Ok(chunk) = JsFuture::from(reader.read()).await else { break };
+                let Ok(chunk) = JsFuture::from(task_reader.read()).await else { break };
                 let done = js_sys::Reflect::get(&chunk, &JsValue::from_str("done")).ok().and_then(|d| d.as_bool()).unwrap_or(true);
                 if done {
                     break;
@@ -400,7 +429,21 @@ mod web {
             reading.borrow_mut().closed = true;
         });
         let outbox = Rc::new(RefCell::new(Outbox::default()));
-        Ok(Box::new(WebSerial { inbox, outbox, writer: Rc::new(port.writable().get_writer()) }))
+        Ok(Box::new(WebSerial { inbox, outbox, port, reader, writer, teardown: Teardown::default() }))
+    }
+
+    /// Shuts the port down in the order [`Teardown`] gives. Every step is attempted even if one fails.
+    async fn close_port_steps(port: &SerialPort, reader: Option<&Reader>, writer: Option<&Writer>, steps: Vec<CloseStep>) {
+        for step in steps {
+            match (step, reader, writer) {
+                (CloseStep::CancelReader, Some(r), _) => drop(JsFuture::from(r.cancel()).await),
+                (CloseStep::CloseWriter, _, Some(w)) => drop(JsFuture::from(w.close()).await),
+                (CloseStep::ReleaseReader, Some(r), _) => r.release_lock(),
+                (CloseStep::ReleaseWriter, _, Some(w)) => w.release_lock(),
+                (CloseStep::ClosePort, ..) => drop(JsFuture::from(port.close()).await),
+                _ => {}
+            }
+        }
     }
 
     /// Most unread serial bytes kept (GRBL's replies are a few dozen bytes a line).
@@ -423,7 +466,21 @@ mod web {
     struct WebSerial {
         inbox: Rc<RefCell<Inbox>>,
         outbox: Rc<RefCell<Outbox>>,
+        port: Rc<SerialPort>,
+        reader: Rc<Reader>,
         writer: Rc<Writer>,
+        teardown: Teardown,
+    }
+
+    /// Disconnecting, a lost connection and a failed handshake all end by dropping the transport: close the
+    /// port then, or the tab keeps it open and locked and the next Connect fails.
+    impl Drop for WebSerial {
+        fn drop(&mut self) {
+            let steps = self.teardown.steps(Held { reader: true, writer: true });
+            let (port, reader, writer) = (Rc::clone(&self.port), Rc::clone(&self.reader), Rc::clone(&self.writer));
+            self.inbox.borrow_mut().closed = true;
+            spawn_local(async move { close_port_steps(&port, Some(&*reader), Some(&*writer), steps).await });
+        }
     }
 
     // SAFETY-ish note: the browser build is single-threaded (wasm32 without atomics has no other
