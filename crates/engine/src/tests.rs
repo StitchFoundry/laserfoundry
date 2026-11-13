@@ -1781,6 +1781,52 @@ mod import_tests {
         assert!(registry::register("f1", info, glyphs).is_ok(), "replacing a loaded font is always allowed");
         registry::clear();
         assert!(s.execute("text.edit", &json!({"id": v["id"], "text": "H"})).is_err(), "editing needs the font loaded again");
+        svg_text_uses_the_loaded_library_fonts_and_says_what_it_could_not_draw();
+    }
+
+    /// Touches the process-wide font registry, so it lives inside the test above (nothing else may race it).
+    fn svg_text_uses_the_loaded_library_fonts_and_says_what_it_could_not_draw() {
+        use crate::fontlib as registry;
+        let info = r#"{"name":"Loaded Sans","horiz_adv_x":{"H":50},"horiz_adv_x_space":30,"leading":98}"#;
+        let glyphs = r#"{"document":{"layers":[{"kind":{"type":"layer","children":[{"name":"H","kind":{"type":"path","path":{"subpaths":[{"anchors":[{"p":[0,0]},{"p":[0,-70]},{"p":[50,-70]},{"p":[50,0]}],"closed":true}]}}}]}}]}}"#;
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><text x="10" y="50" font-family="Arial" font-weight="bold" font-size="40">HH</text></svg>"#;
+        // The browser's situation: no installed fonts (this machine's would make the result depend on the machine).
+        let import = |s: &mut Session| {
+            let out = laserfoundry_svg::import_svg_without_system_fonts(svg.as_bytes(), Some(&crate::fontlib::LibraryTextOutliner)).unwrap();
+            for ip in out.paths {
+                let id = s.doc.add_shape(laserfoundry_doc::Shape::path(ip.name, 0, ip.path));
+                s.selection = vec![id];
+            }
+            json!({
+                "ids": s.selection.clone(), "text_outlined": out.text_outlined, "text_substituted": out.text_substituted, "text_dropped": out.text_dropped,
+                "note": crate::cmd::file::text_note(out.text_substituted, out.text_dropped),
+            })
+        };
+
+        // No fonts anywhere: the words cannot be drawn and the import says so instead of dropping them silently.
+        registry::clear();
+        let mut s = Session::new();
+        let v = import(&mut s);
+        assert_eq!((v["text_outlined"].clone(), v["text_dropped"].clone()), (json!(0), json!(1)));
+        assert!(v["note"].as_str().unwrap().contains("could not be drawn"), "{v}");
+
+        // Arial maps to the held sans font: paths come out where the text sits (x = 10 px, baseline y = 50 px).
+        registry::register("loaded-sans", info, glyphs).unwrap();
+        let v = import(&mut s);
+        assert_eq!((v["text_outlined"].clone(), v["text_substituted"].clone(), v["text_dropped"].clone()), (json!(1), json!(0), json!(0)));
+        assert!(v["note"].is_null(), "{v}");
+        let b = s.doc.shape(v["ids"][0].as_u64().unwrap()).unwrap().world_bounds().unwrap();
+        let mm = 25.4 / 96.0;
+        assert!((b.x0 - 10.0 * mm).abs() < 0.2 && (b.y1 - 50.0 * mm).abs() < 0.2, "{b:?}");
+        assert!((b.y1 - b.y0 - 40.0 * 0.72 * mm).abs() < 0.2, "capitals are about 0.72 of the font size: {b:?}");
+
+        // Only an unrelated font held: it stands in, and the import says so.
+        registry::clear();
+        registry::register("loaded-block", info.replace("Sans", "Block").as_str(), glyphs).unwrap();
+        let v = import(&mut s);
+        assert_eq!((v["text_outlined"].clone(), v["text_substituted"].clone()), (json!(1), json!(1)));
+        assert!(v["note"].as_str().unwrap().contains("stand-in"), "{v}");
+        registry::clear();
     }
 
     #[test]

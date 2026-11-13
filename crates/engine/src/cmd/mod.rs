@@ -3,7 +3,7 @@
 mod ai;
 mod arrange;
 mod edit;
-mod file;
+pub(crate) mod file;
 mod help;
 mod image;
 mod job;
