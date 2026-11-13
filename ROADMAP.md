@@ -15,6 +15,10 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-13 — Camera bracket, first cut (#87).** New `hardware/camera-bracket/`: parametric OpenSCAD source (frame, board and tilt
+  parameters, TODO placeholders), README with print settings, fitting steps, a "measure these 3 numbers" table and the MakerFoundry listing
+  draft. **Not done / not checked:** OpenSCAD was unavailable, so the source is uncompiled and no STL/3MF is exported; no test print; frame
+  measurements need Bruce.
 - **2026-11-12 — Camera support, part 1: the maths (#86).** New crate `laserfoundry-camera` (layer 0, in the browser build): fisheye lens
   model with undistort/distort, 4-point bed homography, per-camera profile JSON (size-capped, finite-checked), alignment-cross positions,
   checkerboard SVG. Tests: placement error <= 0.5 mm over a 400 x 400 mm bed on a synthetic projective + lens transform, round trips,
@@ -1076,6 +1080,12 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   the setup wizard and bed check, the frame feed and rotary refusals, the org links) and `v0.2.1.md` carries a note that it was folded in.
   Known issues lists #68 (the web app drops SVG text); the open-issue list was not checked from the job. **Not checked:** the full gate (the
   pull request's CI is the check); `cargo update --workspace` was not run, so CI must confirm the lockfiles need no change. Bruce publishes.
+- **2026-11-11 — A restarted job that stops again saves its place in the design's program (#90).** A job started with
+  **Start here** (`job.resume`) that was interrupted again saved its line and fingerprint from the restarted program, so the next
+  "A job was interrupted" offer could never be used, and typing its line by hand pointed earlier in the design (re-burning work). The
+  app now remembers the program and line a job was restarted from and saves the place in the design's program (header lines map to
+  the restart line; any miscount errs earlier). Regression test fails without the fix. Nightly sweep: no `needs-triage` issues; full
+  `cargo xtask ci` green on main (after `rustup target add wasm32-unknown-unknown`, #43); `cargo audit` clean but the 3 known zbus warnings.
 - **2026-11-08 — Fix #76: resuming after the program's `M5` no longer switches the laser back on.** `resume_from` replayed the
   program's `M3`/`M4` line (at S0) even when the skipped part had already sent `M5`, so resuming from the footer left the laser enabled
   with nothing to turn it off. `M5` now clears the remembered spindle line. Test: `resuming_after_the_laser_was_switched_off_does_not_switch_it_on_again`
@@ -1103,3 +1113,18 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   and dropped counts, the library-font mapping) and the engine registry test. **Not done:** editable text objects from `<text>` (optional in the
   issue); bold/italic are not synthesised; `dx`/`dy`/`rotate` and `textPath` are ignored; the browser build was not run in a real browser here,
   and the library fonts are only loaded after "Install fonts" on the web, so a first import before that reports the text as not drawn.
+- **2026-11-09 — issue #67, no "use my own API key".** The account window has no own-key checkbox or key field, the payer row and consent
+  dialog no longer mention one, and every AI request goes through the Foundry Account (credits). A key kept by an earlier version is
+  deleted from the stored settings when they load (written back without `key`/`use_key`), and a person who relied on it sees "AI now uses your
+  Foundry Account. Sign in to continue." `Auth::Key` stays in `laserfoundry-ai` for headless/developer use only and is unreachable from the
+  GUI. README, `docs/ai.md` and the checklist no longer offer the option. Checked with unit tests (no key option, stored key removed and the
+  note, requests go to the account service). **Not done:** the CLI/MCP environment-variable key path was not looked at (it is not in the
+  app); the retired i18n strings are inline `tr()` texts that went with the code; the first-use notice text itself never named a key.
+- **2026-11-13 — Fix #94: `fuzz/Cargo.lock` back in step (nightly sweep).** The fuzz workspace's lockfile had drifted and pinned
+  advisory-flagged and yanked crates (`rustls-webpki` 0.103.15, `webpki-roots` 1.0.9, `rustix` 1.1.5, `clipboard-win` 5.4.1). It was
+  re-seeded from the main `Cargo.lock` (`cargo update --workspace` in `fuzz/`): every shared crate now has the main lockfile's version, so
+  the main audit covers it. New `cargo xtask fuzzlock` (part of `cargo xtask ci`) fails when a crate shared with the main lockfile is pinned
+  at another version. Checked: the new xtask test fails on the old lockfile (27 drifted crates) and passes on the new one; `cargo audit
+  --deny unsound --deny yanked` in `fuzz/` is clean; the fuzz binaries build on stable with `--locked`. **Not done:** the fuzz targets were
+  not run under cargo-fuzz (nightly is not installed here); `audit.yml` still audits only the main lockfile (a workflow change for Bruce).
+  Nightly sweep 2026-11-13: no issues awaited triage, no new findings filed; main audit clean apart from the three known zbus warnings.
