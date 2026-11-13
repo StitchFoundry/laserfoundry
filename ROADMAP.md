@@ -15,6 +15,10 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-13 — Camera bracket, first cut (#87).** New `hardware/camera-bracket/`: parametric OpenSCAD source (frame, board and tilt
+  parameters, TODO placeholders), README with print settings, fitting steps, a "measure these 3 numbers" table and the MakerFoundry listing
+  draft. **Not done / not checked:** OpenSCAD was unavailable, so the source is uncompiled and no STL/3MF is exported; no test print; frame
+  measurements need Bruce.
 - **2026-11-12 — Camera support, part 1: the maths (#86).** New crate `laserfoundry-camera` (layer 0, in the browser build): fisheye lens
   model with undistort/distort, 4-point bed homography, per-camera profile JSON (size-capped, finite-checked), alignment-cross positions,
   checkerboard SVG. Tests: placement error <= 0.5 mm over a 400 x 400 mm bed on a synthetic projective + lens transform, round trips,
