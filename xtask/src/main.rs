@@ -3,6 +3,7 @@
 mod assets;
 mod brands;
 mod cleanroom;
+mod fuzzlock;
 mod layers;
 mod messages;
 mod site_fonts;
@@ -22,9 +23,10 @@ commands:
   wasm       cargo check the crates of the browser build for wasm32-unknown-unknown (never break wasm)
   stats      tests and lines of Rust per crate
   assets     check that every file under assets/ has a row in ATTRIBUTION.md
+  fuzzlock   fail when fuzz/Cargo.lock pins a shared crate at a version the main Cargo.lock does not have
   messages   rewrite the list of engine messages for translators (--check: fail if out of date)
   site-fonts <fonts-repo> <site-dir>  copy the drawable library fonts into the hosted site with an index
-  ci         fmt --check, clippy -D warnings, test, layers, cleanroom, brands, assets, messages, wasm (stops at the first failure)
+  ci         fmt --check, clippy -D warnings, test, layers, cleanroom, brands, assets, fuzzlock, messages, wasm (stops at the first failure)
 ";
 
 fn main() -> ExitCode {
@@ -33,6 +35,7 @@ fn main() -> ExitCode {
         Some("cleanroom") => cleanroom::run(&root()),
         Some("assets") => assets::run(&root()),
         Some("brands") => brands::run(&root()),
+        Some("fuzzlock") => fuzzlock::run(&root()),
         Some("wasm") => wasm::run(&root()),
         Some("stats") => stats::run(&root()),
         Some("messages") => messages::run(&root(), std::env::args().nth(2).as_deref() == Some("--check")),
@@ -70,6 +73,8 @@ fn ci() -> Result<(), String> {
     brands::run(&root())?;
     eprintln!("==> assets");
     assets::run(&root())?;
+    eprintln!("==> fuzzlock");
+    fuzzlock::run(&root())?;
     eprintln!("==> messages");
     messages::run(&root(), true)?;
     eprintln!("==> wasm");

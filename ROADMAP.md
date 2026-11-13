@@ -1101,3 +1101,11 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   GUI. README, `docs/ai.md` and the checklist no longer offer the option. Checked with unit tests (no key option, stored key removed and the
   note, requests go to the account service). **Not done:** the CLI/MCP environment-variable key path was not looked at (it is not in the
   app); the retired i18n strings are inline `tr()` texts that went with the code; the first-use notice text itself never named a key.
+- **2026-11-13 — Fix #94: `fuzz/Cargo.lock` back in step (nightly sweep).** The fuzz workspace's lockfile had drifted and pinned
+  advisory-flagged and yanked crates (`rustls-webpki` 0.103.15, `webpki-roots` 1.0.9, `rustix` 1.1.5, `clipboard-win` 5.4.1). It was
+  re-seeded from the main `Cargo.lock` (`cargo update --workspace` in `fuzz/`): every shared crate now has the main lockfile's version, so
+  the main audit covers it. New `cargo xtask fuzzlock` (part of `cargo xtask ci`) fails when a crate shared with the main lockfile is pinned
+  at another version. Checked: the new xtask test fails on the old lockfile (27 drifted crates) and passes on the new one; `cargo audit
+  --deny unsound --deny yanked` in `fuzz/` is clean; the fuzz binaries build on stable with `--locked`. **Not done:** the fuzz targets were
+  not run under cargo-fuzz (nightly is not installed here); `audit.yml` still audits only the main lockfile (a workflow change for Bruce).
+  Nightly sweep 2026-11-13: no issues awaited triage, no new findings filed; main audit clean apart from the three known zbus warnings.
