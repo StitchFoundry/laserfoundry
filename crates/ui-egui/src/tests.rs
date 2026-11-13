@@ -298,6 +298,48 @@ mod job_position_tests {
         h.frame(vec![]);
         assert!(!file.exists(), "finished cleanly");
     }
+
+    #[test]
+    fn a_restarted_job_that_stops_again_saves_its_place_in_the_original_program() {
+        let dir = temp_dir("jobpos-resumed");
+        let file = dir.join("job-position.json");
+        let mut h = harness_with(platform(&dir));
+        h.app.connect();
+        let start = Instant::now();
+        while h.app.snap.as_ref().and_then(|s| s.status.as_ref()).is_none() {
+            h.frame(vec![]);
+            assert!(start.elapsed() < Duration::from_secs(10), "no status");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        for i in 0..12 {
+            h.app.run("shape.ellipse", json!({"cx": 20 + 12 * i, "cy": 40, "rx": 5, "ry": 5}));
+        }
+        h.app.run("job.gcode", json!({}));
+        let original = h.app.session.last_gcode.clone().unwrap();
+        let from = original.lines().count() / 3;
+        // Start here (the Laser panel's restart), then the restarted job stops again after 60 acknowledged lines.
+        h.app.start_from_line(from);
+        let resumed = h.app.job_program.clone().expect("the restarted job runs");
+        assert!(resumed.starts_with("; LaserFoundry resume from line"), "{resumed}");
+        let snap = Snapshot {
+            connected: true,
+            status: None,
+            job: laserfoundry_device::JobState::Finished(Err("power cut".into())),
+            progress: Some(laserfoundry_device::Progress { sent: 60, acknowledged: 60, total: resumed.lines().count() }),
+            console: Vec::new(),
+            settings: Default::default(),
+        };
+        h.app.record_job_position(&snap);
+        let saved = job_position::load(&file).expect("a position is saved");
+        assert_eq!(saved.hash, job_position::fingerprint(&original), "the position belongs to the design's program, which is what is offered again");
+        assert_eq!(saved.total_lines, original.lines().count());
+        let in_resumed = laserfoundry_device::restart_line(&resumed, 60);
+        assert_eq!(original.lines().nth(saved.line - 1), resumed.lines().nth(in_resumed - 1), "the same place in both programs");
+        assert!(saved.line >= from, "never before where the restart began: {} < {from}", saved.line);
+        let header = Restart { program: original.as_str().into(), from }.place_in_design(1, resumed.lines().count());
+        assert_eq!(header.line, from, "a stop inside the restart's own header restarts at the same line");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 mod recovery_tests {
@@ -1826,8 +1868,8 @@ mod machine_tests {
         // Cancel drops it; asking again and confirming sends it.
         h.app.pending_start = None;
         h.app.start_job("G21\n".into());
-        let program = h.app.pending_start.take().unwrap();
-        h.app.begin_job(program);
+        let (program, restart) = h.app.pending_start.take().unwrap();
+        h.app.begin_job(program, restart);
         assert!(h.app.job_program.is_some());
 
         // With absolute coordinates the bed is checked by the program itself: no question.
