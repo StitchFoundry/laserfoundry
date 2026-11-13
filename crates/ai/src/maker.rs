@@ -93,6 +93,11 @@ pub fn read_published(server: &str, status: u16, body: &str) -> Result<Published
 /// The address from a `?open=` value (already decoded once, as the browser reads it), if it is a design file on one of
 /// MakerFoundry's hosts and nothing else.
 pub fn open_link(value: &str) -> Result<OpenLink, AiError> {
+    open_link_in(super::services::Services::Production, value)
+}
+
+/// [`open_link`] for the services in use: staging accepts only the staging MakerFoundry's host, and production never does.
+pub fn open_link_in(services: super::services::Services, value: &str) -> Result<OpenLink, AiError> {
     let value = value.trim();
     if value.is_empty() || value.len() > MAX_LINK || !value.is_ascii() || value.chars().any(|c| c.is_control() || c.is_whitespace() || c == '\\') {
         return Err(AiError::BadLink);
@@ -102,7 +107,7 @@ pub fn open_link(value: &str) -> Result<OpenLink, AiError> {
     let (host, tail) = rest.split_at(split);
     // no user name, port or IPv6 form, and the host has to be one of ours (host names have no case)
     let host = host.to_ascii_lowercase();
-    if !OPEN_HOSTS.contains(&host.as_str()) {
+    if !services.open_hosts().contains(&host.as_str()) {
         return Err(AiError::BadLink);
     }
     let path_end = tail.find(['?', '#']).unwrap_or(tail.len());

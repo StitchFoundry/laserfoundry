@@ -111,3 +111,10 @@ path = "fuzz_targets/inkstitch_font.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "camera_profile"
+path = "fuzz_targets/camera_profile.rs"
+test = false
+doc = false
+bench = false
