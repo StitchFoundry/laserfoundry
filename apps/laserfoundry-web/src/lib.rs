@@ -9,6 +9,7 @@
 pub mod fontindex;
 mod page;
 pub mod serial_close;
+pub mod serial_pick;
 pub mod service;
 
 #[cfg(target_arch = "wasm32")]
@@ -20,6 +21,7 @@ mod web {
     use std::rc::Rc;
 
     use crate::serial_close::{CloseStep, Held, Teardown};
+    use crate::serial_pick::{PortId, choose};
     use laserfoundry_device::Transport;
     use laserfoundry_ui_egui::{Fetched, FontDownload, FontDownloadFailure, LaserFoundryApp, Platform, Upload};
     use wasm_bindgen::prelude::*;
@@ -336,7 +338,12 @@ mod web {
         #[wasm_bindgen(js_namespace = ["navigator", "serial"], js_name = requestPort, catch)]
         fn serial_request_port() -> Result<js_sys::Promise, JsValue>;
 
+        #[wasm_bindgen(js_namespace = ["navigator", "serial"], js_name = getPorts, catch)]
+        fn serial_get_ports() -> Result<js_sys::Promise, JsValue>;
+
         type SerialPort;
+        #[wasm_bindgen(method, js_name = getInfo)]
+        fn get_info(this: &SerialPort) -> JsValue;
         #[wasm_bindgen(method, js_name = open)]
         fn open(this: &SerialPort, options: &JsValue) -> js_sys::Promise;
         #[wasm_bindgen(method, js_name = close)]
@@ -382,12 +389,43 @@ mod web {
             .unwrap_or_else(|| "the browser refused".into())
     }
 
-    /// Asks the person to choose a serial device, opens it and starts the reader.
+    thread_local! {
+        /// The device opened last, so a reconnect picks it again when several ports are granted.
+        static LAST_PORT: std::cell::Cell<Option<PortId>> = const { std::cell::Cell::new(None) };
+    }
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // the value is range-checked just above the cast
+    fn port_id(port: &SerialPort) -> PortId {
+        let info = port.get_info();
+        let field = |name: &str| {
+            js_sys::Reflect::get(&info, &JsValue::from_str(name))
+                .ok()
+                .and_then(|v| v.as_f64())
+                .filter(|v| (0.0..=f64::from(u16::MAX)).contains(v))
+                .map(|v| v as u16)
+        };
+        PortId { vendor: field("usbVendorId"), product: field("usbProductId") }
+    }
+
+    /// A port the person already granted, if one is the obvious choice (no picker on reconnect).
+    async fn granted_port() -> Option<SerialPort> {
+        let list = JsFuture::from(serial_get_ports().ok()?).await.ok()?;
+        let ports: Vec<SerialPort> = js_sys::Array::from(&list).iter().map(|p| p.unchecked_into()).collect();
+        let ids: Vec<PortId> = ports.iter().map(port_id).collect();
+        let index = choose(&ids, LAST_PORT.with(|l| l.get()))?;
+        ports.into_iter().nth(index)
+    }
+
+    /// Reopens an already-granted port, or asks the person to choose a serial device; opens it and starts the reader.
     async fn open_serial_port() -> Result<Box<dyn Transport + Send>, JsValue> {
         if !web_serial_available() {
             return Err(JsValue::from_str("this browser has no Web Serial (use a Chromium-based browser)"));
         }
-        let port: SerialPort = JsFuture::from(serial_request_port()?).await?.unchecked_into();
+        let port: SerialPort = match granted_port().await {
+            Some(port) => port,
+            None => JsFuture::from(serial_request_port()?).await?.unchecked_into(),
+        };
+        LAST_PORT.with(|l| l.set(Some(port_id(&port))));
         let options = js_sys::Object::new();
         js_sys::Reflect::set(&options, &JsValue::from_str("baudRate"), &JsValue::from_f64(BAUD))?;
         JsFuture::from(port.open(&options)).await?;

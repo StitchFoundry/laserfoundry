@@ -15,6 +15,10 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-13 — Web serial: reuse a granted port (issue #100, slice B).** Connect now asks `navigator.serial.getPorts()` first and
+  reopens the port used last time (or the only granted one) without the picker; with none or several undistinguishable it calls
+  `requestPort()` as before. The choice lives in `serial_pick` (native unit tests). **Not checked:** real Chrome/hardware (the job
+  could not build or run code; CI runs the gate).
 - **2026-11-13 — Web serial: close the port on disconnect (issue #100, slice A).** Dropping the browser transport (disconnect, lost
   connection, failed handshake) now cancels the reader, closes the writer, releases both locks and calls `port.close()`; a failed
   connect after `open` closes the port too. The order lives in `serial_close` (native unit tests: order, partial locks, close once,
