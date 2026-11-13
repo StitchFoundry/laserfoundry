@@ -627,6 +627,7 @@ fn resume_controls(app: &mut LaserFoundryApp, ui: &mut egui::Ui, gcode: &str, li
             && let Some(v) = app.run("job.resume", json!({ "line": app.resume_line, "include": true }))
             && let Some(text) = v["gcode"].as_str()
         {
+            app.resume_origin = Some(crate::ResumeOrigin { original: gcode.into(), restarted: text.into(), line: app.resume_line });
             app.start_job(text.to_string());
         }
     });

@@ -24,6 +24,26 @@ pub fn fingerprint(program: &str) -> u64 {
     program.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
 }
 
+/// Where a job that stopped after `acknowledged` lines should be restarted from. A job that was itself
+/// restarted from `(original, line)` runs a program with its own header and numbering, so its position
+/// is mapped back into `original` (the design's program) and saved with that program's fingerprint.
+pub fn position_for(program: &str, resumed_from: Option<(&str, usize)>, acknowledged: usize) -> JobPosition {
+    let total = program.lines().count();
+    let line = laserfoundry_device::restart_line(program, acknowledged).min(total.max(1));
+    let Some((original, from)) = resumed_from else {
+        return JobPosition { hash: fingerprint(program), line, total_lines: total };
+    };
+    let original_total = original.lines().count();
+    let from = from.clamp(1, original_total.max(1));
+    // The restarted program is a header followed by the original from `from` on, minus any `G92` lines it
+    // dropped. Counting those as header makes the header look longer, so the result errs earlier, never later.
+    let tail = original_total + 1 - from;
+    let dropped = original.lines().skip(from - 1).filter(|l| l.trim_start().starts_with("G92")).count();
+    let header = total.saturating_sub(tail).saturating_add(dropped);
+    let mapped = if line <= header { from } else { from + (line - header - 1) };
+    JobPosition { hash: fingerprint(original), line: mapped.min(original_total.max(1)), total_lines: original_total }
+}
+
 pub fn save(path: &Path, pos: &JobPosition) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);

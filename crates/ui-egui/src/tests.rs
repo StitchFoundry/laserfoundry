@@ -273,6 +273,30 @@ mod job_position_tests {
     }
 
     #[test]
+    fn a_restarted_job_that_stops_again_saves_its_place_in_the_original_program() {
+        let mut h = Harness::new();
+        h.app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 20, "height": 20}));
+        h.app.run("shape.rectangle", json!({"x": 50, "y": 10, "width": 20, "height": 20}));
+        h.app.run("job.gcode", json!({}));
+        let original = h.app.session.last_gcode.clone().unwrap();
+        let total = original.lines().count();
+        let from = total / 3;
+        let restarted = h.app.run("job.resume", json!({"line": from, "include": true})).unwrap()["gcode"].as_str().unwrap().to_string();
+
+        let pos = job_position::position_for(&restarted, Some((&original, from)), 60);
+        assert_eq!(pos.hash, job_position::fingerprint(&original), "saved against the design's program");
+        assert_eq!(pos.total_lines, total);
+        let header = restarted.lines().count() - (total - from + 1);
+        let acknowledged_in_original = from + (60 - header) - 1;
+        assert!(pos.line >= from && pos.line <= acknowledged_in_original, "{pos:?}");
+
+        let early = job_position::position_for(&restarted, Some((&original, from)), 3);
+        assert_eq!(early.line, from, "inside the header it restarts from the same line");
+        let plain = job_position::position_for(&original, None, 60);
+        assert_eq!(plain.hash, job_position::fingerprint(&original));
+    }
+
+    #[test]
     fn a_clean_run_leaves_no_position_behind_and_starting_a_job_replaces_an_old_one() {
         let dir = temp_dir("jobpos-clean");
         let file = dir.join("job-position.json");

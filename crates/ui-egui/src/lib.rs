@@ -87,6 +87,13 @@ struct Reconnect {
     next: Instant,
 }
 
+/// Where a "Start here" job came from: the design's program, the restarted program, and the line it restarts from.
+struct ResumeOrigin {
+    original: std::sync::Arc<str>,
+    restarted: std::sync::Arc<str>,
+    line: usize,
+}
+
 pub struct LaserFoundryApp {
     pub session: Session,
     platform: Box<dyn Platform>,
@@ -212,6 +219,10 @@ pub struct LaserFoundryApp {
     resume_line: usize,
     /// The program of the job being run, kept to work out where to restart it if it is interrupted.
     job_program: Option<std::sync::Arc<str>>,
+    /// For a job started from a later line: the design's program and the line it was restarted from.
+    job_resumed_from: Option<(std::sync::Arc<str>, usize)>,
+    /// Set by "Start here" until the restarted program starts, so its position can be mapped back.
+    resume_origin: Option<ResumeOrigin>,
     last_position_write: Instant,
     /// A job a previous session left unfinished, found at startup.
     interrupted: Option<job_position::JobPosition>,
@@ -406,6 +417,8 @@ impl LaserFoundryApp {
             template_name: String::new(),
             resume_line: 1,
             job_program: None,
+            job_resumed_from: None,
+            resume_origin: None,
             last_position_write: Instant::now(),
             interrupted,
             awaiting_upload: None,
@@ -1216,6 +1229,8 @@ impl LaserFoundryApp {
         if let Err(e) = link.start_job(program) {
             self.status = Some((i18n::tr_message(&e.to_string()), true));
         } else {
+            // Only a program that is exactly the restarted one counts; any other start has no origin.
+            self.job_resumed_from = self.resume_origin.take().filter(|r| *r.restarted == *kept).map(|r| (r.original, r.line));
             self.job_program = Some(kept);
             self.forget_interrupted();
         }
@@ -1232,29 +1247,29 @@ impl LaserFoundryApp {
     /// Keeps the saved job position current while a job runs, and removes it when the job ends cleanly.
     fn record_job_position(&mut self, snap: &Snapshot) {
         let Some(path) = self.platform.job_position_file() else { return };
-        let write = |program: &str, acknowledged: usize| {
-            let total = program.lines().count();
-            let line = laserfoundry_device::restart_line(program, acknowledged).min(total.max(1));
-            job_position::save(&path, &job_position::JobPosition { hash: job_position::fingerprint(program), line, total_lines: total });
+        let write = |program: &str, resumed_from: Option<&(std::sync::Arc<str>, usize)>, acknowledged: usize| {
+            job_position::save(&path, &job_position::position_for(program, resumed_from.map(|(o, l)| (&**o, *l)), acknowledged));
         };
         match &snap.job {
             JobState::Running | JobState::Paused => {
                 let (Some(p), Some(program)) = (snap.progress, self.job_program.clone()) else { return };
                 if p.acknowledged > 0 && self.last_position_write.elapsed() >= Duration::from_secs(job_position::WRITE_EVERY_SECS) {
                     self.last_position_write = Instant::now();
-                    write(&program, p.acknowledged);
+                    write(&program, self.job_resumed_from.as_ref(), p.acknowledged);
                 }
             }
             JobState::Finished(Ok(_)) => {
+                self.job_resumed_from = None;
                 if self.job_program.take().is_some() {
                     job_position::clear(&path);
                 }
             }
             JobState::Finished(Err(_)) => {
+                let resumed_from = self.job_resumed_from.take();
                 if let (Some(program), Some(p)) = (self.job_program.take(), snap.progress)
                     && p.acknowledged > 0
                 {
-                    write(&program, p.acknowledged);
+                    write(&program, resumed_from.as_ref(), p.acknowledged);
                 }
             }
             _ => {}
