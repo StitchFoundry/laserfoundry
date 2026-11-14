@@ -1770,7 +1770,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "eframe",
  "egui",
@@ -1792,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-ai"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde_json",
  "thiserror 2.0.21",
@@ -1800,7 +1800,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-camera"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1809,7 +1809,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "image",
  "laserfoundry-engine",
@@ -1821,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-device"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "serialport",
@@ -1831,7 +1831,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-doc"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "kurbo",
  "laserfoundry-geom",
@@ -1841,7 +1841,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-dxf"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "kurbo",
  "laserfoundry-doc",
@@ -1851,7 +1851,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-engine"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "image",
  "kurbo",
@@ -1875,7 +1875,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-fontlib"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "serde_json",
@@ -1885,7 +1885,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-format"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "laserfoundry-doc",
  "laserfoundry-geom",
@@ -1896,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-fuzzkit"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "laserfoundry-ai",
  "laserfoundry-camera",
@@ -1915,7 +1915,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-gcode"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "laserfoundry-doc",
  "laserfoundry-geom",
@@ -1925,7 +1925,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-geom"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "kurbo",
  "serde",
@@ -1934,21 +1934,21 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-i18n"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "laserfoundry-icon"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "image",
 ]
 
 [[package]]
 name = "laserfoundry-mcp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "getrandom 0.4.3",
  "laserfoundry-engine",
@@ -1958,7 +1958,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-nest"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "laserfoundry-geom",
  "thiserror 2.0.21",
@@ -1966,7 +1966,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-pathops"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "i_overlay",
  "laserfoundry-geom",
@@ -1975,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-svg"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "kurbo",
  "laserfoundry-doc",
@@ -1987,7 +1987,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-text"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "harfrust 0.15.0",
  "kurbo",
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-toolpath"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "kurbo",
  "laserfoundry-doc",
@@ -2012,7 +2012,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-ui-egui"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "egui",
  "image",
@@ -2032,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "laserfoundry-web"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "eframe",
  "js-sys",
@@ -4652,7 +4652,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde_json",
 ]
