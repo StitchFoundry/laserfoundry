@@ -10,6 +10,7 @@ pub mod fontindex;
 mod page;
 pub mod serial_close;
 pub mod serial_pick;
+pub mod serial_signals;
 pub mod service;
 
 #[cfg(target_arch = "wasm32")]
@@ -22,6 +23,7 @@ mod web {
 
     use crate::serial_close::{CloseStep, Held, Teardown};
     use crate::serial_pick::{PortId, choose};
+    use crate::serial_signals::{Moment, lines_at};
     use laserfoundry_device::Transport;
     use laserfoundry_ui_egui::{Fetched, FontDownload, FontDownloadFailure, LaserFoundryApp, Platform, Upload};
     use wasm_bindgen::prelude::*;
@@ -348,6 +350,8 @@ mod web {
         fn open(this: &SerialPort, options: &JsValue) -> js_sys::Promise;
         #[wasm_bindgen(method, js_name = close)]
         fn close(this: &SerialPort) -> js_sys::Promise;
+        #[wasm_bindgen(method, js_name = setSignals)]
+        fn set_signals(this: &SerialPort, signals: &JsValue) -> js_sys::Promise;
         #[wasm_bindgen(method, getter)]
         fn readable(this: &SerialPort) -> Stream;
         #[wasm_bindgen(method, getter)]
@@ -429,6 +433,7 @@ mod web {
         let options = js_sys::Object::new();
         js_sys::Reflect::set(&options, &JsValue::from_str("baudRate"), &JsValue::from_f64(BAUD))?;
         JsFuture::from(port.open(&options)).await?;
+        lower_signals(&port, Moment::AfterOpen).await;
         // From here the port is open: any failure below must close it again or the next Connect cannot open it.
         let port = Rc::new(port);
         let reader = match port.readable().get_reader() {
@@ -478,10 +483,26 @@ mod web {
                 (CloseStep::CloseWriter, _, Some(w)) => drop(JsFuture::from(w.close()).await),
                 (CloseStep::ReleaseReader, Some(r), _) => r.release_lock(),
                 (CloseStep::ReleaseWriter, _, Some(w)) => w.release_lock(),
-                (CloseStep::ClosePort, ..) => drop(JsFuture::from(port.close()).await),
+                (CloseStep::ClosePort, ..) => {
+                    lower_signals(port, Moment::BeforeClose).await;
+                    drop(JsFuture::from(port.close()).await);
+                }
                 _ => {}
             }
         }
+    }
+
+    /// Drives DTR and RTS to the state [`lines_at`] gives, so an auto-reset board is not held in reset or sent into its bootloader.
+    /// Best effort: a device without these lines refuses, which is fine. Nothing is written to the controller.
+    async fn lower_signals(port: &SerialPort, moment: Moment) {
+        let lines = lines_at(moment);
+        let signals = js_sys::Object::new();
+        for (name, on) in [("dataTerminalReady", lines.data_terminal_ready), ("requestToSend", lines.request_to_send)] {
+            if js_sys::Reflect::set(&signals, &JsValue::from_str(name), &JsValue::from_bool(on)).is_err() {
+                return;
+            }
+        }
+        drop(JsFuture::from(port.set_signals(&signals)).await);
     }
 
     /// Most unread serial bytes kept (GRBL's replies are a few dozen bytes a line).

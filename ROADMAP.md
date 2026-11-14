@@ -15,6 +15,10 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-14 — Web serial: DTR/RTS low on open and close (issue #100, slice D).** After `open` and before `close` the browser build sets
+  DTR and RTS low with `setSignals` so an ESP32 auto-reset circuit is not left asserting reset; nothing is written to the controller (no
+  S, M3 or M4). The line state is in `serial_signals` (native unit test); board notes are in `docs/serial-boards.md`. **Not checked:** real
+  Chrome/hardware (the job could not build or run code; CI runs the gate); the port can still pulse once while the OS opens it.
 - **2026-11-14 — Alarm banner with Unlock (issue #100, slice C).** When connected and the controller reports Alarm, the Machine block shows a banner with the alarm text and an Unlock ($X) button, and points to the jog pad. Visibility is a pure helper (`alarm_banner_visible`) with a unit test. **Not checked:** real hardware; the gate runs in CI.
 - **2026-11-13 — Web serial: reuse a granted port (issue #100, slice B).** Connect now asks `navigator.serial.getPorts()` first and
   reopens the port used last time (or the only granted one) without the picker; with none or several undistinguishable it calls
