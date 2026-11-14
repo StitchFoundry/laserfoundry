@@ -1138,3 +1138,4 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   --deny unsound --deny yanked` in `fuzz/` is clean; the fuzz binaries build on stable with `--locked`. **Not done:** the fuzz targets were
   not run under cargo-fuzz (nightly is not installed here); `audit.yml` still audits only the main lockfile (a workflow change for Bruce).
   Nightly sweep 2026-11-13: no issues awaited triage, no new findings filed; main audit clean apart from the three known zbus warnings.
+- **2026-11-14 — issue #88, recommended cameras page.** New `docs/recommended-cameras.md` (what to buy and avoid, how to check a camera is UVC, mounting height vs bed size from the field-of-view formula, honest limits), linked from `docs/camera.md` and the features page. Docs only; the height table is a labelled estimate, not measured with a real camera. `cargo xtask ci` run before the PR.
