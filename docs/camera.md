@@ -9,3 +9,5 @@ checkerboard (SVG). Synthetic tests check placement within 0.5 mm over a 400 x 4
 **Not done yet:** camera capture (browser `getUserMedia`, native UVC), the guided checkerboard solver for lens parameters, the
 burn-and-click flow and its commands, the overlay under the canvas, and the manual test checklist (Chrome, Edge, Windows, Linux,
 a real 1080p camera). Camera frames stay on the user's machine; nothing is uploaded.
+
+What camera to buy, how to check it, and how high to mount it: [`recommended-cameras.md`](recommended-cameras.md).
