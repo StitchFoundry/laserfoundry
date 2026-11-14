@@ -3736,6 +3736,14 @@ mod setup_tests {
         }
 
         #[test]
+        fn the_alarm_banner_shows_only_when_connected_and_in_alarm() {
+            assert!(ms::alarm_banner_visible(true, Some(MachineState::Alarm)));
+            assert!(!ms::alarm_banner_visible(false, Some(MachineState::Alarm)));
+            assert!(!ms::alarm_banner_visible(true, Some(MachineState::Idle)));
+            assert!(!ms::alarm_banner_visible(true, None));
+        }
+
+        #[test]
         fn the_status_line_says_one_plain_word() {
             let label = ms::status_label;
             assert_eq!(label(false, true, None, false), "Disconnected");

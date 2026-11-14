@@ -142,6 +142,11 @@ pub(crate) fn status_label(connected: bool, simulator: bool, state: Option<Machi
     if simulator { trf!("Simulator: {state}", state = state) } else { state }
 }
 
+/// Whether the Machine block shows the alarm banner (with its Unlock button): connected and the controller reports Alarm.
+pub(crate) fn alarm_banner_visible(connected: bool, state: Option<MachineState>) -> bool {
+    connected && matches!(state, Some(MachineState::Alarm))
+}
+
 /// Whether the wizard should open by itself at launch: the host keeps a note, and there is none yet.
 pub(crate) fn should_open_on_launch(platform: &dyn Platform) -> bool {
     platform.setup_file().is_some_and(|p| !p.exists())
