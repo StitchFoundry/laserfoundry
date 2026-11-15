@@ -70,6 +70,15 @@ When a bug is not obvious, follow the `debug` skill (`.claude/skills/debug/SKILL
 - Fix the root cause, minimally, one bug per commit, and prove it: the regression test must fail without the fix. Search for the same mistake elsewhere. Say plainly what could not be checked (real hardware, a real service).
 - A bug that can leave the laser on, ignore the bed or lose work comes before everything else.
 
+## PR size rules (hard limits)
+- One issue = one small PR. Target under 300 changed lines and under 10 files (lockfiles, generated files and tests excluded from the count).
+- Before coding, estimate the size. If it will be bigger, STOP and split: comment on the issue with a numbered list of slices, each independently mergeable and green on main, then open the slices as new `claude-proposed` issues ("Part 1 of N: ..."). Work only slice 1 in this run.
+- Never leave `main` broken between slices: gate unfinished work behind a flag or keep it unreferenced.
+- Save and commit after every file; open a DRAFT PR early so a step-limit cut-off keeps the work. Resume the same branch instead of restarting.
+- Before opening or updating a PR: `git fetch` and rebase/merge `main` so the branch is current; run `cargo xtask ci` locally first.
+- Do not run the full heavy test suite more than once per run; run only the affected package's tests while iterating.
+- If you hit your step limit, write a handoff comment (done, left, next command) on the PR.
+
 ## Changes reach `main` through a pull request
 `main` requires a pull request and a passing `gate` check (the owner's decision, 2026-10-31; before that, agent pushes bypassed it on the owner's admin
 rights). Work on a branch, run the whole of `cargo xtask ci` before every push (not a part of it: a push that skipped clippy broke CI once), open a
