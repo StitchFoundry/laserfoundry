@@ -32,19 +32,18 @@ pub fn parse_status(line: &str) -> Option<Status> {
     }
     let mut fields = inner.split('|');
     let state = state_named(fields.next()?.split(':').next()?);
-    let mut position_is_work = false;
-    let position = fields
-        .find_map(|f| {
-            f.strip_prefix("MPos:").or_else(|| {
-                let w = f.strip_prefix("WPos:");
-                position_is_work = w.is_some();
-                w
-            })
-        })
-        .and_then(|v| {
-            let mut n = v.split(',').map(|s| s.trim().parse::<f64>().ok().filter(|x| x.is_finite()));
-            Some((n.next()??, n.next()??, n.next().flatten().unwrap_or(0.0)))
-        });
+    let fields: Vec<&str> = fields.collect();
+    // Machine position wins whichever order the fields come in; a work position is only the fallback.
+    let field = |prefix: &str| fields.iter().find_map(|f| f.strip_prefix(prefix));
+    let (value, position_is_work) = match (field("MPos:"), field("WPos:")) {
+        (Some(m), _) => (Some(m), false),
+        (None, Some(w)) => (Some(w), true),
+        (None, None) => (None, false),
+    };
+    let position = value.and_then(|v| {
+        let mut n = v.split(',').map(|s| s.trim().parse::<f64>().ok().filter(|x| x.is_finite()));
+        Some((n.next()??, n.next()??, n.next().flatten().unwrap_or(0.0)))
+    });
     Some(Status { state, position, position_is_work })
 }
 
@@ -104,6 +103,8 @@ mod tests {
         assert!(w.position_is_work && w.position == Some((1.0, 2.0, 0.0)));
         let m = parse_status("<Idle|MPos:1.000,2.000,0.000|WPos:9,9,9>").unwrap();
         assert!(!m.position_is_work && m.position == Some((1.0, 2.0, 0.0)), "machine position wins when both are reported");
+        let m = parse_status("<Idle|WPos:9,9,9|MPos:1.000,2.000,0.000>").unwrap();
+        assert!(!m.position_is_work && m.position == Some((1.0, 2.0, 0.0)), "machine position wins in either order: {m:?}");
         assert!(!parse_status("<Idle>").unwrap().position_is_work);
     }
 
