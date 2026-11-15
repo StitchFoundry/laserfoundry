@@ -15,6 +15,7 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-15 — Fix #121: status reports with `WPos` before `MPos` (nightly sweep).** `parse_status` now takes the machine position whichever order the two fields come in, as the comma form already did; the reversed-order case is in the existing test and fails without the fix. Nightly sweep: `cargo xtask ci` green on main (wasm checked after adding the target), `cargo audit` clean apart from three allowed unmaintained warnings. **Not checked:** a real controller that sends both fields.
 - **2026-11-14 — Web serial: DTR/RTS low on open and close (issue #100, slice D).** After `open` and before `close` the browser build sets
   DTR and RTS low with `setSignals` so an ESP32 auto-reset circuit is not left asserting reset; nothing is written to the controller (no
   S, M3 or M4). The line state is in `serial_signals` (native unit test); board notes are in `docs/serial-boards.md`. **Not checked:** real
