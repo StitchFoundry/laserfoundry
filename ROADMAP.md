@@ -15,6 +15,7 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+- **2026-11-15 — Floating, pinnable control box (issue #119, slice 1).** New `control_box` module: a draggable, collapsible window over the canvas while a machine is connected, with Start (disabled, reason shown, when a job cannot start), Pause/Resume, Stop (always), Frame, Home, Unlock (alarm only) and Set origin / Go to origin (not while a job runs). Pin keeps it in place and on top; unpinned it closes on a click elsewhere or with the X. Pin, open state and position are saved per machine through `Platform::storage` (damaged text falls back to defaults); View menu has "Control box" and "Reset control box position". Start and Frame are shared with the Laser panel. Checked by unit tests (round trip, hostile saved text, reset); **not run locally, CI is the first run; not checked:** touch on a device, a pointer-driven frame test, the collapsed state is not remembered. Slice 2 (ring jog dial) is not started.
 - **2026-11-14 — Web serial: DTR/RTS low on open and close (issue #100, slice D).** After `open` and before `close` the browser build sets
   DTR and RTS low with `setSignals` so an ESP32 auto-reset circuit is not left asserting reset; nothing is written to the controller (no
   S, M3 or M4). The line state is in `serial_signals` (native unit test); board notes are in `docs/serial-boards.md`. **Not checked:** real
