@@ -79,11 +79,11 @@ pub(crate) fn show(app: &mut LaserFoundryApp, ctx: &egui::Context) {
     }
     let mut st = app.control_box.state;
     let mut open = true;
-    let id = egui::Id::new(("control_box", app.control_box.generation));
+    let id = egui::Id::unique(("control_box", app.control_box.generation));
     let mut window = egui::Window::new(tr("Control box")).id(id).open(&mut open).resizable(false);
     window = match st.pos {
         Some(p) => window.default_pos(p),
-        None => window.default_pos(ctx.available_rect().left_top() + egui::vec2(12.0, 12.0)),
+        None => window.default_pos(ctx.content_rect().left_top() + egui::vec2(12.0, 12.0)),
     };
     if st.pinned {
         window = window.order(egui::Order::Foreground);
