@@ -687,6 +687,24 @@ fn connection(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     }
 }
 
+/// Traces the design's outline with the beam at the frame power (shared by the Laser panel and the control box).
+pub(crate) fn frame_action(app: &mut LaserFoundryApp) {
+    if let Some(v) = app.run("job.frame", json!({ "power": app.frame_power }))
+        && let Some(g) = v["gcode"].as_str()
+    {
+        app.start_job(g.to_string());
+    }
+}
+
+/// Generates the design's G-code and starts the job (shared by the Laser panel and the control box).
+pub(crate) fn start_action(app: &mut LaserFoundryApp) {
+    if let Some(v) = app.run("job.gcode", json!({ "include": true }))
+        && let Some(g) = v["gcode"].as_str()
+    {
+        app.start_job(g.to_string());
+    }
+}
+
 fn job_controls(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     let connected = app.link.is_some();
     let active = app.job_active();
@@ -695,17 +713,11 @@ fn job_controls(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         if ui.button(tr("Generate")).clicked() {
             generate(app);
         }
-        if ui.add_enabled(connected && !active, egui::Button::new(tr("Frame"))).clicked()
-            && let Some(v) = app.run("job.frame", json!({ "power": app.frame_power }))
-            && let Some(g) = v["gcode"].as_str()
-        {
-            app.start_job(g.to_string());
+        if ui.add_enabled(connected && !active, egui::Button::new(tr("Frame"))).clicked() {
+            frame_action(app);
         }
-        if ui.add_enabled(connected && !active, egui::Button::new(tr("Start"))).clicked()
-            && let Some(v) = app.run("job.gcode", json!({ "include": true }))
-            && let Some(g) = v["gcode"].as_str()
-        {
-            app.start_job(g.to_string());
+        if ui.add_enabled(connected && !active, egui::Button::new(tr("Start"))).clicked() {
+            start_action(app);
         }
     });
     ui.horizontal(|ui| {

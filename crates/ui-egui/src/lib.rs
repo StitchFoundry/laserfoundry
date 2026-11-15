@@ -2,6 +2,7 @@
 //! `Session::execute`, so everything the UI can do an agent or script can do too.
 
 mod canvas;
+mod control_box;
 mod crop_ui;
 mod font_ui;
 mod geometry;
@@ -151,6 +152,7 @@ pub struct LaserFoundryApp {
     link: Option<Link>,
     /// Latest state of the machine link, refreshed once per frame.
     snap: Option<Snapshot>,
+    control_box: control_box::ControlBox,
     last_job: Option<JobState>,
     console_input: String,
     /// The text being typed in the inspector (committed when the box loses focus).
@@ -364,6 +366,7 @@ impl LaserFoundryApp {
             player: timeline_ui::Player::default(),
             link: None,
             snap: None,
+            control_box: control_box::ControlBox::new(),
             last_job: None,
             console_input: String::new(),
             text_buffer: None,
@@ -502,6 +505,7 @@ impl LaserFoundryApp {
             egui::Panel::bottom("timeline").show(ui, |ui| timeline_ui::bar(self, ui));
         }
         egui::CentralPanel::default().show(ui, |ui| canvas::show(self, ui));
+        control_box::show(self, ui.ctx());
         self.dialogs(ui.ctx());
         self.ai_windows(ui.ctx());
     }

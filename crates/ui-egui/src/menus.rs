@@ -61,6 +61,11 @@ pub fn menu_bar(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
                 ui.separator();
                 ui.checkbox(&mut app.show_preview, tr("Toolpath preview"));
                 ui.checkbox(&mut app.show_travel, tr("Show travel moves"));
+                ui.checkbox(&mut app.control_box.state.shown, tr("Control box")).on_hover_text(tr("Floating Start, Stop, Frame and Home buttons"));
+                if ui.button(tr("Reset control box position")).clicked() {
+                    crate::control_box::reset_position(app);
+                    ui.close();
+                }
                 ui.menu_button(tr("Theme"), |ui| {
                     for choice in crate::theme::ThemeChoice::ALL {
                         if ui.radio_value(&mut app.theme, choice, tr(choice.label())).clicked() {
