@@ -32,7 +32,7 @@ pub(super) const COMMANDS: &[CommandSpec] = &[
         label: "Add Starter Presets",
         menu: "Laser",
         shortcut: None,
-        params_doc: "{}  — adds generic starting points (by operation, not by material) that are not already in the project; always check them with a material test grid",
+        params_doc: "{}  — adds generic starting points (by operation, not by material) that are not already in the project; always check them with a material test grid (the two mark-metal entries are for a marking spray or paste on stainless or coated metal, which a diode laser can mark but not cut; run generate.test_grid on scrap around their speed and power first)",
         mutates: true,
         run: add_starters,
     },
@@ -121,6 +121,9 @@ const STARTERS: &[(&str, LayerMode, f64, f64, f64, u32, f64)] = &[
     ("Starter: photo (image)", LayerMode::Fill, 4000.0, 40.0, 5.0, 1, 0.1),
     ("Starter: thin cut", LayerMode::Line, 600.0, 90.0, 40.0, 1, 0.1),
     ("Starter: multi-pass cut", LayerMode::Line, 900.0, 100.0, 50.0, 4, 0.1),
+    // A diode laser cannot cut or engrave bare metal: it only fuses a marking spray or paste onto it, hence the names.
+    ("Starter: mark metal, spray (diode: mark only)", LayerMode::Fill, 1200.0, 50.0, 10.0, 1, 0.08),
+    ("Starter: mark metal, paste (diode: mark only)", LayerMode::Fill, 800.0, 60.0, 10.0, 1, 0.06),
 ];
 
 fn add_starters(s: &mut Session, _: &Value) -> Result<Value, EngineError> {

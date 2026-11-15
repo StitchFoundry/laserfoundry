@@ -1254,6 +1254,11 @@ mod import_tests {
         s.execute("preset.apply", &json!({"name": "Starter: thin cut", "layer": 3})).unwrap();
         let l = s.doc.layer(3).unwrap();
         assert_eq!((l.mode, l.speed, l.max_power), (laserfoundry_doc::LayerMode::Line, 600.0, 90.0));
+        for p in s.doc.presets.iter().filter(|p| p.name.contains("mark metal")) {
+            assert!(p.name.chars().count() <= 60 && p.name.contains("mark only"), "{}", p.name);
+            assert_eq!(p.settings.mode, laserfoundry_doc::LayerMode::Fill, "{}", p.name);
+        }
+        assert_eq!(s.doc.presets.iter().filter(|p| p.name.contains("mark metal")).count(), 2);
         for p in &s.doc.presets {
             let l = &p.settings;
             assert!(
