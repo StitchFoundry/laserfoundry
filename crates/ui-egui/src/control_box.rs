@@ -126,7 +126,7 @@ fn body(app: &mut LaserFoundryApp, st: &mut Saved, ui: &mut egui::Ui) {
     let paused = app.snap.as_ref().is_some_and(|s| s.job == laserfoundry_device::JobState::Paused);
     let alarm = app.snap.as_ref().and_then(|s| s.status.as_ref()).is_some_and(|s| s.state == MachineState::Alarm);
     let pin_label = if st.pinned { tr("Pinned") } else { tr("Pin") };
-    ui.toggle_value(&mut st.pinned, pin_label).on_hover_text(tr("Pinned: stays where it is, on top. Unpinned: closes when you click elsewhere"));
+    ui.toggle_value(&mut st.pinned, pin_label).on_hover_text(tr("Pinned: stays where it is, on top. Unpinned: closes when you click elsewhere"));
     let blocked = start_blocked(app);
     if big(ui, blocked.is_none(), tr("Start")).clicked() {
         panels::start_action(app);
