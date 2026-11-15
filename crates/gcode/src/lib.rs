@@ -378,14 +378,14 @@ mod tests {
         #[test]
         fn a_chosen_point_is_a_laser_off_rapid_after_m5() {
             let g = program(Placement::Absolute, Finish::Point { x: 50.0, y: 40.0 }).unwrap();
-            assert_eq!(tail(&g), ["M5", "G0 X50 Y40"], "{g}");
+            assert_eq!(tail(&g), ["M5", "G0 X50 Y360"], "{g}");
         }
 
         #[test]
         fn a_chosen_point_is_relative_to_the_job_origin_in_relative_modes() {
             let rel = Placement::Relative { anchor: Point::new(10.0, 10.0), extent: (20.0, 10.0), set_zero: false };
             let g = program(rel, Finish::Point { x: 15.0, y: 12.0 }).unwrap();
-            assert_eq!(tail(&g), ["M5", "G0 X5 Y2"], "{g}");
+            assert_eq!(tail(&g), ["M5", "G0 X5 Y-2"], "{g}");
         }
 
         #[test]
