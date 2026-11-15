@@ -48,6 +48,38 @@ mod line_tests {
     }
 }
 
+mod sub_layer_tests {
+    use super::*;
+
+    fn multi_doc() -> Document {
+        let mut doc = rect_doc(20.0, 10.0, LayerMode::Fill);
+        let mut cut = doc.layer(0).unwrap().clone();
+        cut.mode = LayerMode::Line;
+        cut.speed = 300.0;
+        cut.id = 7; // a sub-layer always runs on its parent's shapes, whatever id it carries
+        doc.layer_mut(0).unwrap().sub_layers.push(cut);
+        doc
+    }
+
+    #[test]
+    fn sub_layers_run_after_the_layer_in_list_order_on_the_same_shapes() {
+        let job = plan(&multi_doc()).unwrap();
+        let kinds: Vec<(OpKind, f64, LayerId)> = job.ops.iter().map(|o| (o.kind, o.speed, o.layer)).collect();
+        assert_eq!(kinds.first().map(|k| k.0), Some(OpKind::Fill));
+        assert_eq!(kinds.last(), Some(&(OpKind::Line, 300.0, 0)));
+    }
+
+    #[test]
+    fn layer_output_off_switches_off_its_sub_layers_and_a_sub_layer_can_be_off_alone() {
+        let mut doc = multi_doc();
+        doc.layer_mut(0).unwrap().sub_layers[0].output = false;
+        assert!(plan(&doc).unwrap().ops.iter().all(|o| o.kind == OpKind::Fill));
+        doc.layer_mut(0).unwrap().sub_layers[0].output = true;
+        doc.layer_mut(0).unwrap().output = false;
+        assert!(plan(&doc).unwrap().ops.is_empty());
+    }
+}
+
 mod kerf_tests {
     use super::*;
 

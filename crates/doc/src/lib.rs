@@ -154,6 +154,7 @@ impl Layer {
             name: std::mem::take(&mut self.name),
             color: std::mem::take(&mut self.color),
             output: self.output,
+            sub_layers: std::mem::take(&mut self.sub_layers),
             ..preset.clone()
         };
         *self = keep;
@@ -323,13 +324,26 @@ pub struct Layer {
     pub dither: Dither,
     pub output: bool,
     pub air_assist: bool,
+    /// Further operations on this colour's shapes, run after the layer's own settings in list order
+    /// (for example a fill pass, then a line cut). They share the layer's id; their own `sub_layers`
+    /// are ignored. At most [`MAX_SUB_LAYERS`].
+    #[serde(default)]
+    pub sub_layers: Vec<Layer>,
 }
+
+/// Most sub-layers one layer may hold.
+pub const MAX_SUB_LAYERS: usize = 8;
 
 fn default_tab_width() -> f64 {
     1.0
 }
 
 impl Layer {
+    /// True when the layer runs more than one operation (the layer list shows a "Multi" mode).
+    pub fn is_multi(&self) -> bool {
+        !self.sub_layers.is_empty()
+    }
+
     pub fn numbered(id: LayerId) -> Layer {
         Layer {
             id,
@@ -358,6 +372,7 @@ impl Layer {
             dither: Dither::FloydSteinberg,
             output: true,
             air_assist: false,
+            sub_layers: Vec::new(),
         }
     }
 }

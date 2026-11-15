@@ -20,6 +20,8 @@ pub use raster::{Grid, dither, sample_grid};
 pub use timeline::{LayerTime, Moment, Motion, OpTime, Timeline, move_seconds, move_times};
 pub use trace::{MAX_TRACE_PIXELS, trace};
 
+use std::borrow::Cow;
+
 use laserfoundry_doc::{Document, Layer, LayerId, LayerMode, Shape, ShapeKind};
 use laserfoundry_geom::{Point, Polyline, Rect, bounds_of_polylines};
 use thiserror::Error;
@@ -102,7 +104,20 @@ pub fn plan(doc: &Document) -> Result<Job, PlanError> {
         Some([x, y]) if x.is_finite() && y.is_finite() => Point::new(x, y),
         _ => Point::ORIGIN,
     };
-    for layer in doc.layers.iter().filter(|l| l.output) {
+    // Each layer's own settings run first, then each enabled sub-layer in list order, all on the
+    // layer's shapes. Sub-layers are forced to the layer's id and cannot nest.
+    let stages: Vec<Cow<Layer>> = doc
+        .layers
+        .iter()
+        .filter(|l| l.output)
+        .flat_map(|base| {
+            let subs = base.sub_layers.iter().take(laserfoundry_doc::MAX_SUB_LAYERS).filter(|s| s.output);
+            let subs = subs.map(|s| Cow::Owned(Layer { id: base.id, sub_layers: Vec::new(), ..s.clone() }));
+            std::iter::once(Cow::Borrowed(base)).chain(subs)
+        })
+        .collect();
+    for stage in &stages {
+        let layer: &Layer = stage;
         validate(layer)?;
         let all: Vec<&Shape> = doc.shapes.iter().filter(|s| s.layer == layer.id).collect();
         // Lower cut priorities are finished before higher ones (all shapes default to 0).
