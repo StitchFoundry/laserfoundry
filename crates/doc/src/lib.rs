@@ -189,6 +189,22 @@ pub struct JobOrigin {
     pub start_from: StartFrom,
     /// Which point of the job's bounds sits at the origin (relative modes only).
     pub anchor: Anchor,
+    /// Where the head goes after the last cut (always with the laser off).
+    #[serde(default)]
+    pub finish: Finish,
+}
+
+/// Where the head is left when a job ends.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Finish {
+    /// The work zero: the machine origin when absolute, the job origin (the spot the job started from) otherwise.
+    #[default]
+    Origin,
+    /// Stay at the last point of the job.
+    Stay,
+    /// A chosen point, workspace mm (checked against the bed like any other move).
+    Point { x: f64, y: f64 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
