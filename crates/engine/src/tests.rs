@@ -604,6 +604,54 @@ mod group_and_layer_tests {
     }
 }
 
+mod sub_layer_tests {
+    use super::*;
+
+    #[test]
+    fn sub_layers_are_added_edited_reordered_removed_and_undone() {
+        let mut s = Session::new();
+        s.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 10, "height": 10, "layer": 0})).unwrap();
+        s.execute("layer.set", &json!({"id": 0, "mode": "fill", "speed": 3000})).unwrap();
+        s.execute("layer.sub_add", &json!({"id": 0})).unwrap();
+        s.execute("layer.sub_add", &json!({"id": 0, "index": 0})).unwrap();
+        assert!(s.doc.layer(0).unwrap().is_multi());
+        assert_eq!(s.doc.layer(0).unwrap().sub_layers[0].speed, 3000.0, "a new sub-layer copies the layer");
+        s.execute("layer.set", &json!({"id": 0, "sub": 1, "mode": "line", "speed": 200})).unwrap();
+        let sub = &s.doc.layer(0).unwrap().sub_layers[1];
+        assert_eq!((sub.mode, sub.speed), (laserfoundry_doc::LayerMode::Line, 200.0));
+        assert_eq!(s.doc.layer(0).unwrap().speed, 3000.0, "the layer itself is untouched");
+        s.execute("layer.sub_move", &json!({"id": 0, "sub": 1, "index": 0})).unwrap();
+        assert_eq!(s.doc.layer(0).unwrap().sub_layers[0].speed, 200.0);
+        let gcode = s.execute("job.gcode", &json!({"include": true})).unwrap();
+        let text = gcode["gcode"].as_str().unwrap();
+        assert!(text.contains("F200") && text.contains("F3000"), "{text}");
+        s.execute("layer.sub_remove", &json!({"id": 0, "sub": 0})).unwrap();
+        assert_eq!(s.doc.layer(0).unwrap().sub_layers.len(), 1);
+        s.execute("edit.undo", &Value::Null).unwrap();
+        assert_eq!(s.doc.layer(0).unwrap().sub_layers.len(), 2, "removal is one undo step");
+    }
+
+    #[test]
+    fn bad_sub_layer_requests_fail_and_change_nothing() {
+        let mut s = Session::new();
+        s.execute("layer.sub_add", &json!({"id": 0})).unwrap();
+        for (cmd, params) in [
+            ("layer.sub_add", json!({"id": 99})),
+            ("layer.sub_add", json!({"id": 0, "index": 5})),
+            ("layer.sub_remove", json!({"id": 0, "sub": 1})),
+            ("layer.sub_remove", json!({"id": 0})),
+            ("layer.sub_move", json!({"id": 0, "sub": 0, "index": 1})),
+            ("layer.set", json!({"id": 0, "sub": 3, "speed": 10})),
+        ] {
+            assert!(s.execute(cmd, &params).is_err(), "{cmd} {params}");
+        }
+        for _ in 0..20 {
+            let _ = s.execute("layer.sub_add", &json!({"id": 0}));
+        }
+        assert_eq!(s.doc.layer(0).unwrap().sub_layers.len(), laserfoundry_doc::MAX_SUB_LAYERS);
+    }
+}
+
 mod array_tests {
     use super::*;
 

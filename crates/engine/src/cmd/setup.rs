@@ -1,4 +1,4 @@
-use laserfoundry_doc::{Dither, LayerId, LayerMode, Origin, Rotary};
+use laserfoundry_doc::{Dither, LayerId, LayerMode, MAX_SUB_LAYERS, Origin, Rotary};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -25,6 +25,33 @@ pub(super) const COMMANDS: &[CommandSpec] = &[
         run: layer_move,
     },
     CommandSpec {
+        id: "layer.sub_add",
+        label: "Add Sub-layer",
+        menu: "Laser",
+        shortcut: None,
+        params_doc: "{id, index?}  — adds a sub-layer, a copy of the layer's cut settings, that runs on the same shapes after the layer and its earlier sub-layers (at most 8; index places it in the list; edit it with layer.set and sub)",
+        mutates: true,
+        run: sub_add,
+    },
+    CommandSpec {
+        id: "layer.sub_remove",
+        label: "Remove Sub-layer",
+        menu: "Laser",
+        shortcut: None,
+        params_doc: "{id, sub}  — removes the sub-layer at this position (from 0) in the layer's sub-layer list",
+        mutates: true,
+        run: sub_remove,
+    },
+    CommandSpec {
+        id: "layer.sub_move",
+        label: "Reorder Sub-layer",
+        menu: "Laser",
+        shortcut: None,
+        params_doc: "{id, sub, index}  — moves a sub-layer to a new position in the list; sub-layers run in list order after the layer itself",
+        mutates: true,
+        run: sub_move,
+    },
+    CommandSpec {
         id: "machine.set",
         label: "Device Settings",
         menu: "Laser",
@@ -38,6 +65,8 @@ pub(super) const COMMANDS: &[CommandSpec] = &[
 #[derive(Deserialize)]
 struct LayerParams {
     id: LayerId,
+    /// Edit this sub-layer of the layer instead of the layer itself.
+    sub: Option<usize>,
     name: Option<String>,
     color: Option<String>,
     mode: Option<LayerMode>,
@@ -69,7 +98,11 @@ struct LayerParams {
 
 fn layer_set(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     let p: LayerParams = parse(params)?;
-    let layer = s.doc.layer_mut(p.id).ok_or_else(|| EngineError::NotFound(format!("layer {} does not exist", p.id)))?;
+    let parent = s.doc.layer_mut(p.id).ok_or_else(|| EngineError::NotFound(format!("layer {} does not exist", p.id)))?;
+    let layer = match p.sub {
+        Some(i) => parent.sub_layers.get_mut(i).ok_or_else(|| EngineError::NotFound(format!("layer {} has no sub-layer {i}", p.id)))?,
+        None => parent,
+    };
     if let Some(v) = p.speed {
         layer.speed = in_range("speed", v, 1.0, 100_000.0)?;
     }
@@ -160,6 +193,52 @@ fn layer_move(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     let layer = s.doc.layers.remove(from);
     s.doc.layers.insert(p.index, layer);
     Ok(json!({ "index": p.index }))
+}
+
+#[derive(Deserialize)]
+struct SubParams {
+    id: LayerId,
+    sub: Option<usize>,
+    index: Option<usize>,
+}
+
+fn sub_target(s: &mut Session, id: LayerId) -> Result<&mut laserfoundry_doc::Layer, EngineError> {
+    s.doc.layer_mut(id).ok_or_else(|| EngineError::NotFound(format!("layer {id} does not exist")))
+}
+
+fn sub_add(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    let p: SubParams = parse(params)?;
+    let layer = sub_target(s, p.id)?;
+    if layer.sub_layers.len() >= MAX_SUB_LAYERS {
+        return Err(EngineError::BadParams(format!("a layer holds at most {MAX_SUB_LAYERS} sub-layers")));
+    }
+    let index = p.index.unwrap_or(layer.sub_layers.len());
+    if index > layer.sub_layers.len() {
+        return Err(EngineError::BadParams(format!("index must be at most {}", layer.sub_layers.len())));
+    }
+    let sub = laserfoundry_doc::Layer { sub_layers: Vec::new(), ..layer.clone() };
+    layer.sub_layers.insert(index, sub);
+    Ok(json!({ "sub": index }))
+}
+
+fn sub_remove(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    let p: SubParams = parse(params)?;
+    let layer = sub_target(s, p.id)?;
+    let n = layer.sub_layers.len();
+    let sub = p.sub.filter(|&i| i < n).ok_or_else(|| EngineError::BadParams("sub is not a sub-layer of this layer".into()))?;
+    layer.sub_layers.remove(sub);
+    Ok(json!({ "sub_layers": layer.sub_layers.len() }))
+}
+
+fn sub_move(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    let p: SubParams = parse(params)?;
+    let layer = sub_target(s, p.id)?;
+    let n = layer.sub_layers.len();
+    let sub = p.sub.filter(|&i| i < n).ok_or_else(|| EngineError::BadParams("sub is not a sub-layer of this layer".into()))?;
+    let index = p.index.filter(|&i| i < n).ok_or_else(|| EngineError::BadParams(format!("index must be below {n}")))?;
+    let moved = layer.sub_layers.remove(sub);
+    layer.sub_layers.insert(index, moved);
+    Ok(json!({ "index": index }))
 }
 
 #[derive(Deserialize)]
