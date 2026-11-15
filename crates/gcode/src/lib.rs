@@ -9,7 +9,7 @@ pub use resume::{ResumeError, resume_from};
 
 use std::fmt::Write;
 
-use laserfoundry_doc::{Dialect, Machine, Origin, Rotary};
+use laserfoundry_doc::{Dialect, Finish, Machine, Origin, Rotary};
 use laserfoundry_geom::{Point, Rect};
 use laserfoundry_toolpath::{Job, Move};
 use thiserror::Error;
@@ -55,6 +55,11 @@ pub enum Placement {
 
 /// Generates a complete program: preamble, every op × passes, shutdown.
 pub fn generate(job: &Job, machine: &Machine, placement: Placement) -> Result<String, GcodeError> {
+    generate_finish(job, machine, placement, Finish::Origin)
+}
+
+/// [`generate`] with a choice of where the head goes after the last cut. The move always follows `M5` (laser off).
+pub fn generate_finish(job: &Job, machine: &Machine, placement: Placement, finish: Finish) -> Result<String, GcodeError> {
     check_machine(machine)?;
     let mut w = Writer::new(machine, placement)?;
     w.preamble("LaserFoundry job");
@@ -79,7 +84,7 @@ pub fn generate(job: &Job, machine: &Machine, placement: Placement) -> Result<St
             w.line("M9");
         }
     }
-    w.shutdown();
+    w.shutdown(finish)?;
     Ok(w.out)
 }
 
@@ -101,7 +106,7 @@ pub fn frame(bounds: Rect, machine: &Machine, placement: Placement, speed: f64, 
             w.cut(p, power, speed)?;
         }
     }
-    w.shutdown();
+    w.shutdown(Finish::Origin)?;
     Ok(w.out)
 }
 
@@ -171,9 +176,17 @@ impl<'a> Writer<'a> {
         }
     }
 
-    fn shutdown(&mut self) {
+    fn shutdown(&mut self, finish: Finish) -> Result<(), GcodeError> {
         self.line("M5");
-        self.line("G0 X0 Y0");
+        match finish {
+            Finish::Origin => self.line("G0 X0 Y0"),
+            Finish::Stay => {}
+            Finish::Point { x, y } => {
+                let (mx, my) = self.to_machine(Point::new(x, y))?;
+                self.line(&format!("G0 X{} Y{}", num(mx), num(my)));
+            }
+        }
+        Ok(())
     }
 
     /// Moves Z (with the laser off) when an operation wants a different height; an operation that
@@ -333,6 +346,54 @@ mod tests {
         }
         doc.add_shape(Shape::path("r", 0, rect_path(10.0, 10.0, 20.0, 10.0)));
         generate(&plan(&doc).unwrap(), &doc.machine, Placement::Absolute).unwrap()
+    }
+
+    mod finish_tests {
+        use super::*;
+
+        fn program(placement: Placement, finish: Finish) -> Result<String, GcodeError> {
+            let mut doc = Document::default();
+            doc.add_shape(Shape::path("r", 0, rect_path(10.0, 10.0, 20.0, 10.0)));
+            generate_finish(&plan(&doc).unwrap(), &doc.machine, placement, finish)
+        }
+
+        fn tail(g: &str) -> Vec<&str> {
+            let lines: Vec<&str> = g.lines().collect();
+            lines[lines.len() - 2..].to_vec()
+        }
+
+        #[test]
+        fn origin_is_the_default_ending_and_returns_to_work_zero_laser_off() {
+            let g = program(Placement::Absolute, Finish::Origin).unwrap();
+            assert_eq!(tail(&g), ["M5", "G0 X0 Y0"]);
+            assert_eq!(Finish::default(), Finish::Origin);
+        }
+
+        #[test]
+        fn stay_leaves_the_head_at_the_last_point_after_laser_off() {
+            let g = program(Placement::Absolute, Finish::Stay).unwrap();
+            assert_eq!(g.lines().last(), Some("M5"), "{g}");
+        }
+
+        #[test]
+        fn a_chosen_point_is_a_laser_off_rapid_after_m5() {
+            let g = program(Placement::Absolute, Finish::Point { x: 50.0, y: 40.0 }).unwrap();
+            assert_eq!(tail(&g), ["M5", "G0 X50 Y360"], "{g}");
+        }
+
+        #[test]
+        fn a_chosen_point_is_relative_to_the_job_origin_in_relative_modes() {
+            let rel = Placement::Relative { anchor: Point::new(10.0, 10.0), extent: (20.0, 10.0), set_zero: false };
+            let g = program(rel, Finish::Point { x: 15.0, y: 12.0 }).unwrap();
+            assert_eq!(tail(&g), ["M5", "G0 X5 Y-2"], "{g}");
+        }
+
+        #[test]
+        fn a_point_outside_the_bed_or_not_finite_is_refused() {
+            let out = program(Placement::Absolute, Finish::Point { x: 5000.0, y: 0.0 });
+            assert!(matches!(out, Err(GcodeError::OutOfBed { .. })), "{out:?}");
+            assert_eq!(program(Placement::Absolute, Finish::Point { x: f64::NAN, y: 0.0 }), Err(GcodeError::NonFinite));
+        }
     }
 
     mod refusal_tests {

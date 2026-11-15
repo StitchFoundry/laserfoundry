@@ -1,6 +1,6 @@
 use crate::i18n::{tr, trf};
 use laserfoundry_device::{JobState, Link};
-use laserfoundry_doc::{Anchor, Dither, LayerMode, Origin, ShapeKind, StartFrom, TextAlign};
+use laserfoundry_doc::{Anchor, Dither, Finish, LayerMode, Origin, ShapeKind, StartFrom, TextAlign};
 use serde_json::{Value, json};
 
 use crate::menus::format_duration;
@@ -578,6 +578,7 @@ fn job_origin(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
             app.run("job.set_origin", json!({ "start_from": start_from }));
         }
     });
+    finish_position(app, ui);
     if o.start_from == StartFrom::Absolute {
         return;
     }
@@ -598,6 +599,48 @@ fn job_origin(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         StartFrom::UserOrigin => tr("Jog to the spot, then Set origin; that spot is the job origin."),
         _ => tr("The head's position when the job starts becomes the job origin."),
     });
+}
+
+/// Where the head goes after the last cut (laser off): the start/origin, where it stopped, or a chosen point.
+fn finish_position(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
+    let finish = app.session.doc.job_origin.finish;
+    ui.horizontal(|ui| {
+        ui.label(tr("Finish at"));
+        let name = |f: Finish| match f {
+            Finish::Origin => tr("Origin / start position"),
+            Finish::Stay => tr("Stay at the last cut"),
+            Finish::Point { .. } => tr("A chosen point"),
+        };
+        let mut choice = finish;
+        egui::ComboBox::from_id_salt("finish_at").selected_text(name(finish)).show_ui(ui, |ui| {
+            for f in [Finish::Origin, Finish::Stay, Finish::Point { x: 0.0, y: 0.0 }] {
+                let same = std::mem::discriminant(&f) == std::mem::discriminant(&finish);
+                if ui.selectable_label(same, name(f)).clicked() && !same {
+                    choice = f;
+                }
+            }
+        });
+        if choice != finish {
+            let kind = match choice {
+                Finish::Origin => "origin",
+                Finish::Stay => "stay",
+                Finish::Point { .. } => "point",
+            };
+            app.run("job.set_origin", json!({ "finish": kind }));
+        }
+    });
+    if let Finish::Point { x, y } = finish {
+        ui.horizontal(|ui| {
+            let (mut nx, mut ny) = (x, y);
+            ui.label("X");
+            ui.add(egui::DragValue::new(&mut nx).suffix(" mm"));
+            ui.label("Y");
+            ui.add(egui::DragValue::new(&mut ny).suffix(" mm"));
+            if nx != x || ny != y {
+                app.run("job.set_origin", json!({ "finish": "point", "finish_x": nx, "finish_y": ny }));
+            }
+        });
+    }
 }
 
 /// Offers to pick up a job that an earlier session (or a power cut) left unfinished.
@@ -746,16 +789,19 @@ fn jog_pad(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     let enabled = !app.job_active();
     let origin = app.session.doc.machine.origin;
     ui.add_enabled_ui(enabled, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(tr("Step"));
-            egui::ComboBox::from_id_salt("jog_step").selected_text(format!("{} mm", app.jog_step)).show_ui(ui, |ui| {
-                for s in [0.1, 1.0, 10.0, 50.0] {
-                    ui.selectable_value(&mut app.jog_step, s, format!("{s} mm"));
-                }
+        ui.checkbox(&mut app.classic_pad, tr("Classic pad")).on_hover_text(tr("Show the arrow pad instead of the ring dial"));
+        if app.classic_pad {
+            ui.horizontal(|ui| {
+                ui.label(tr("Step"));
+                egui::ComboBox::from_id_salt("jog_step").selected_text(format!("{} mm", app.jog_step)).show_ui(ui, |ui| {
+                    for s in [0.1, 1.0, 10.0, 50.0] {
+                        ui.selectable_value(&mut app.jog_step, s, format!("{s} mm"));
+                    }
+                });
+                ui.label(tr("Speed"));
+                ui.add(egui::DragValue::new(&mut app.jog_feed).range(10.0..=30_000.0).suffix(" mm/min"));
             });
-            ui.label(tr("Speed"));
-            ui.add(egui::DragValue::new(&mut app.jog_feed).range(10.0..=30_000.0).suffix(" mm/min"));
-        });
+        }
         let mut here = app.move_head_mode;
         if ui.checkbox(&mut here, tr("Click the canvas to move the laser there")).changed() {
             app.move_head_mode = here;
@@ -769,20 +815,24 @@ fn jog_pad(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         // Directions are in workspace terms: "up" is toward the top of the canvas.
         let rows: [[Option<(f64, f64)>; 3]; 3] =
             [[None, Some((0.0, -1.0)), None], [Some((-1.0, 0.0)), None, Some((1.0, 0.0))], [None, Some((0.0, 1.0)), None]];
-        egui::Grid::new("jog_grid").spacing([2.0, 2.0]).show(ui, |ui| {
-            for cells in rows {
-                for cell in cells {
-                    if let Some((wx, wy)) = cell {
-                        if arrow_button(ui, wx, wy).clicked() {
-                            jog(app, wx, wy);
+        if app.classic_pad {
+            egui::Grid::new("jog_grid").spacing([2.0, 2.0]).show(ui, |ui| {
+                for cells in rows {
+                    for cell in cells {
+                        if let Some((wx, wy)) = cell {
+                            if arrow_button(ui, wx, wy).clicked() {
+                                jog(app, wx, wy);
+                            }
+                        } else {
+                            ui.allocate_space(egui::vec2(34.0, 28.0));
                         }
-                    } else {
-                        ui.allocate_space(egui::vec2(34.0, 28.0));
                     }
+                    ui.end_row();
                 }
-                ui.end_row();
-            }
-        });
+            });
+        } else {
+            crate::jog_dial::show(app, ui);
+        }
         ui.horizontal_wrapped(|ui| {
             if ui.button(tr("Home")).on_hover_text(tr("Run the homing cycle ($H)")).clicked() {
                 app.link_do(Link::home);
