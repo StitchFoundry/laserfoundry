@@ -2406,6 +2406,25 @@ mod job_tests {
     }
 
     #[test]
+    fn finish_position_changes_the_program_ending_and_is_saved() {
+        let mut s = square_session();
+        let end = |s: &mut Session| {
+            let g = s.execute("job.gcode", &json!({"include": true})).unwrap();
+            g["gcode"].as_str().unwrap().lines().rev().take(2).map(String::from).collect::<Vec<_>>()
+        };
+        assert_eq!(end(&mut s), ["G0 X0 Y0", "M5"], "default: back to work zero, laser off first");
+        s.execute("job.set_origin", &json!({"finish": "stay"})).unwrap();
+        assert_eq!(end(&mut s)[0], "M5");
+        s.execute("job.set_origin", &json!({"finish": "point", "finish_x": 50, "finish_y": 40})).unwrap();
+        assert_eq!(end(&mut s), ["G0 X50 Y40", "M5"]);
+        let bytes = laserfoundry_format::to_bytes(&s.doc).unwrap();
+        assert_eq!(laserfoundry_format::from_bytes(&bytes).unwrap().job_origin.finish, laserfoundry_doc::Finish::Point { x: 50.0, y: 40.0 });
+        s.execute("job.set_origin", &json!({"finish": "point", "finish_x": 5000, "finish_y": 0})).unwrap();
+        assert!(matches!(s.execute("job.gcode", &Value::Null), Err(EngineError::Gcode(_))), "outside the bed is refused");
+        assert!(s.execute("job.set_origin", &json!({"finish": "point", "finish_x": 1e30})).is_err());
+    }
+
+    #[test]
     fn job_origin_is_undoable_and_saved() {
         let mut s = square_session();
         s.execute("job.set_origin", &json!({"anchor": "bottom_right"})).unwrap();

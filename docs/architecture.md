@@ -70,6 +70,13 @@ point because zero is wherever the user put it). *Current position* also emits `
 command is `job.set_origin`; the setting is saved in the project file (older files load with
 defaults).
 
+*Finish at* (`job_origin.finish`, same command) says where the head goes after the last cut. The program
+always ends `M5` (laser off) and then: `origin` (the default, what every program did before) `G0 X0 Y0`,
+the machine origin when absolute and the job origin (the spot the job started from) in the relative
+modes, so jobs can be repeated after swapping material without re-jogging; `stay` writes nothing more
+(the head is left at the last cut); `point` rapids to a chosen workspace X/Y, which is refused when it is
+outside the bed (absolute) or the job's extent (relative) and is relative to the job origin there.
+
 ## Talking to a machine
 
 `device::Link` owns a transport on a worker thread. It polls status (`?`, a real-time byte that does

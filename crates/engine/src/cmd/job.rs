@@ -1,5 +1,5 @@
 use laserfoundry_device::{SimulatedGrbl, StreamOptions, stream_program};
-use laserfoundry_doc::{Anchor, StartFrom};
+use laserfoundry_doc::{Anchor, Finish, StartFrom};
 use laserfoundry_gcode::Placement;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -22,7 +22,7 @@ pub(super) const COMMANDS: &[CommandSpec] = &[
         label: "Start From / Job Origin",
         menu: "Laser",
         shortcut: None,
-        params_doc: "{start_from?: absolute|user_origin|current_position, anchor?: top_left|top|top_right|left|center|right|bottom_left|bottom|bottom_right}",
+        params_doc: "{start_from?: absolute|user_origin|current_position, anchor?: top_left|top|top_right|left|center|right|bottom_left|bottom|bottom_right, finish?: origin|stay|point (where the head goes after the last cut with the laser off), finish_x?, finish_y? (workspace mm, for finish=point)}",
         mutates: true,
         run: set_origin,
     },
@@ -87,7 +87,7 @@ pub(super) const COMMANDS: &[CommandSpec] = &[
 pub(super) fn generate(s: &Session) -> Result<String, EngineError> {
     let doc = s.job_doc();
     let job = laserfoundry_toolpath::plan(&doc)?;
-    Ok(laserfoundry_gcode::generate(&job, &doc.machine, placement(s)?)?)
+    Ok(laserfoundry_gcode::generate_finish(&job, &doc.machine, placement(s)?, s.doc.job_origin.finish)?)
 }
 
 /// Machine placement for the document's "start from" setting.
@@ -108,14 +108,38 @@ fn placement(s: &Session) -> Result<Placement, EngineError> {
 struct SetOriginParams {
     start_from: Option<StartFrom>,
     anchor: Option<Anchor>,
+    finish: Option<FinishKind>,
+    finish_x: Option<f64>,
+    finish_y: Option<f64>,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum FinishKind {
+    Origin,
+    Stay,
+    Point,
 }
 
 fn set_origin(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     let p: SetOriginParams = parse(params)?;
+    let finish = match p.finish {
+        None => None,
+        Some(FinishKind::Origin) => Some(Finish::Origin),
+        Some(FinishKind::Stay) => Some(Finish::Stay),
+        Some(FinishKind::Point) => {
+            let (x, y) = (p.finish_x.unwrap_or(0.0), p.finish_y.unwrap_or(0.0));
+            if !(x.is_finite() && y.is_finite() && x.abs() <= 1e6 && y.abs() <= 1e6) {
+                return Err(EngineError::BadParams("finish_x and finish_y must be finite numbers".into()));
+            }
+            Some(Finish::Point { x, y })
+        }
+    };
     let o = &mut s.doc.job_origin;
     o.start_from = p.start_from.unwrap_or(o.start_from);
     o.anchor = p.anchor.unwrap_or(o.anchor);
-    Ok(json!({ "start_from": o.start_from, "anchor": o.anchor }))
+    o.finish = finish.unwrap_or(o.finish);
+    Ok(json!({ "start_from": o.start_from, "anchor": o.anchor, "finish": o.finish }))
 }
 
 #[derive(Deserialize)]
