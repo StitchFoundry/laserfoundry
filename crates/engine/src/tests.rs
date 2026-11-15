@@ -2695,7 +2695,7 @@ mod robustness_tests {
                 let _ = s.execute(spec.id, params);
                 // Invariants that must survive any input: layers intact, shapes reference real layers
                 // and have finite geometry, and the planner still returns instead of panicking.
-                assert_eq!(s.doc.layers.len(), 30,"{} with {params}", spec.id);
+                assert_eq!(s.doc.layers.len(), 30, "{} with {params}", spec.id);
                 for sh in &s.doc.shapes {
                     assert!(s.doc.layer(sh.layer).is_some(), "{} with {params}: dangling layer", spec.id);
                     let finite = sh.world_bounds().is_none_or(|b| b.x0.is_finite() && b.y0.is_finite() && b.x1.is_finite() && b.y1.is_finite());
