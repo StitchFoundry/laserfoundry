@@ -596,7 +596,7 @@ mod group_and_layer_tests {
         }
         assert_eq!(s.doc.layer(1).unwrap().color, "#aabbcc", "rejected colours change nothing");
         assert!(s.execute("layer.move", &json!({"id": 99, "index": 0})).is_err());
-        assert!(s.execute("layer.move", &json!({"id": 1, "index": 16})).is_err());
+        assert!(s.execute("layer.move", &json!({"id": 1, "index": 30})).is_err());
         assert!(s.execute("layer.move", &json!({"id": 1, "index": -1})).is_err());
         s.execute("edit.undo", &Value::Null).unwrap();
         s.execute("edit.undo", &Value::Null).unwrap();
@@ -1144,6 +1144,28 @@ mod import_tests {
         s.execute("file.import_dxf", &json!({"data": dxf})).unwrap();
         let layers: Vec<_> = s.doc.shapes.iter().map(|sh| sh.layer).collect();
         assert_eq!(layers, vec![0, 1]);
+    }
+
+    #[test]
+    fn dxf_with_more_layers_than_sixteen_keeps_them_apart_and_reports_overflow() {
+        let dxf_with = |n: usize| {
+            let mut d = String::from("0\nSECTION\n2\nENTITIES\n");
+            for i in 0..n {
+                d.push_str(&format!("0\nLINE\n8\nL{i}\n10\n0\n20\n{i}\n11\n10\n21\n{i}\n"));
+            }
+            d + "0\nENDSEC\n0\nEOF\n"
+        };
+        let mut s = Session::new();
+        let r = s.execute("file.import_dxf", &json!({"data": dxf_with(20), "join": false})).unwrap();
+        let mut layers: Vec<_> = s.doc.shapes.iter().map(|sh| sh.layer).collect();
+        layers.dedup();
+        assert_eq!(layers.len(), 20, "twenty DXF layers land on twenty cut layers");
+        assert_eq!(r["layers_merged"], 0);
+        let mut t = Session::new();
+        let r = t.execute("file.import_dxf", &json!({"data": dxf_with(32), "join": false})).unwrap();
+        assert_eq!(r["layers_merged"], 2);
+        assert!(r["note"].as_str().is_some_and(|n| n.contains("32")), "{r}");
+        assert!(t.doc.shapes.iter().all(|sh| t.doc.layer(sh.layer).is_some()));
     }
 
     #[test]
@@ -2673,7 +2695,7 @@ mod robustness_tests {
                 let _ = s.execute(spec.id, params);
                 // Invariants that must survive any input: layers intact, shapes reference real layers
                 // and have finite geometry, and the planner still returns instead of panicking.
-                assert_eq!(s.doc.layers.len(), 16, "{} with {params}", spec.id);
+                assert_eq!(s.doc.layers.len(), 30,"{} with {params}", spec.id);
                 for sh in &s.doc.shapes {
                     assert!(s.doc.layer(sh.layer).is_some(), "{} with {params}: dangling layer", spec.id);
                     let finite = sh.world_bounds().is_none_or(|b| b.x0.is_finite() && b.y0.is_finite() && b.x1.is_finite() && b.y1.is_finite());

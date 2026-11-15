@@ -304,7 +304,10 @@ fn import_dxf(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
         join_loose_paths(s, &mut ids)?;
     }
     s.selection = ids.clone();
-    Ok(json!({ "ids": ids, "width_mm": dxf.width_mm, "height_mm": dxf.height_mm, "skipped": dxf.skipped }))
+    // More DXF layers than cut layers wrap around onto the first ones; say how many shared a layer.
+    let merged = names.len().saturating_sub(LAYER_COLORS.len());
+    let note = (merged > 0).then(|| format!("{} DXF layers share cut layers because only {} exist", names.len(), LAYER_COLORS.len()));
+    Ok(json!({ "ids": ids, "width_mm": dxf.width_mm, "height_mm": dxf.height_mm, "skipped": dxf.skipped, "layers_merged": merged, "note": note }))
 }
 
 #[derive(Deserialize)]

@@ -6,9 +6,11 @@ use std::sync::Arc;
 use laserfoundry_geom::{Affine, BezPath, Polyline, Rect, bounds_of_polylines, flatten};
 use serde::{Deserialize, Serialize};
 
-pub const LAYER_COLORS: [&str; 16] = [
+/// The cut layers every new document has; the layer count is the length of this palette.
+pub const LAYER_COLORS: [&str; 30] = [
     "#000000", "#0000ff", "#ff0000", "#00e000", "#d0d000", "#ff8000", "#00e0e0", "#ff00ff", "#b4b4b4", "#0000a0", "#a00000", "#00a000", "#a0a000",
-    "#c08000", "#00a0ff", "#a000a0",
+    "#c08000", "#00a0ff", "#a000a0", "#ff80c0", "#8000ff", "#008080", "#804000", "#80ff00", "#00ff80", "#ff0080", "#4060c0", "#606060", "#ffc080",
+    "#80c0ff", "#c080ff", "#408040", "#c04040",
 ];
 
 /// Flattening tolerance (mm) used for planning and previews.

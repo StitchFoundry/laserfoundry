@@ -10,7 +10,7 @@ use super::{AiError, Auth, HttpRequest, Picture, body, check_pictures, clean_tex
 /// The most suggestions read from an answer.
 pub const MAX_SUGGESTIONS: usize = 16;
 /// The layers that exist (see `LAYER_COLORS` in the document crate).
-pub const LAYERS: u32 = 16;
+pub const LAYERS: u32 = 30;
 /// Sensible bounds for a suggested setting.
 pub const SPEED_RANGE: (f64, f64) = (1.0, 60_000.0);
 pub const POWER_RANGE: (f64, f64) = (0.0, 100.0);
