@@ -37,6 +37,7 @@ a coordinate is not a finite number
 a font library folder cannot be used as a fallback font
 a group needs at least two shapes
 a job is running; stop it first
+a layer holds at most {MAX_SUB_LAYERS} sub-layers
 a library font folder name is plain letters, digits, - _ . or space
 a move lies far outside the job's declared extent
 a path needs at least {0} nodes
@@ -80,13 +81,17 @@ give either path or data
 give either path or data_base64
 image is too large
 image raster would need {0} cells (limit {MAX_RASTER_CELLS}); increase the line interval
+index must be at most {1}
 index must be below {1}
+index must be below {n}
 internal error (your document was restored): {0}
 invalid document: {0}
 job cancelled
 job contains a non-finite coordinate
 job has more than {MAX_MOVES} moves
 layer {1} does not exist
+layer {1} has no sub-layer {i}
+layer {id} does not exist
 layer {label_layer} does not exist
 layer {layer} does not exist
 layer {name}: kerf offset failed: {reason}
@@ -134,6 +139,7 @@ size_mm must be between {1} and {2}
 sizes must be positive, finite and the shape must have extent in that direction
 spacing must be a finite number between 0 and 10
 start must be two finite numbers
+sub is not a sub-layer of this layer
 text height must be between {MIN_HEIGHT_MM} and {MAX_HEIGHT_MM} mm
 text is empty
 text is longer than {MAX_CHARS} characters
