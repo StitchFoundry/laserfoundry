@@ -746,16 +746,19 @@ fn jog_pad(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     let enabled = !app.job_active();
     let origin = app.session.doc.machine.origin;
     ui.add_enabled_ui(enabled, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(tr("Step"));
-            egui::ComboBox::from_id_salt("jog_step").selected_text(format!("{} mm", app.jog_step)).show_ui(ui, |ui| {
-                for s in [0.1, 1.0, 10.0, 50.0] {
-                    ui.selectable_value(&mut app.jog_step, s, format!("{s} mm"));
-                }
+        ui.checkbox(&mut app.classic_pad, tr("Classic pad")).on_hover_text(tr("Show the arrow pad instead of the ring dial"));
+        if app.classic_pad {
+            ui.horizontal(|ui| {
+                ui.label(tr("Step"));
+                egui::ComboBox::from_id_salt("jog_step").selected_text(format!("{} mm", app.jog_step)).show_ui(ui, |ui| {
+                    for s in [0.1, 1.0, 10.0, 50.0] {
+                        ui.selectable_value(&mut app.jog_step, s, format!("{s} mm"));
+                    }
+                });
+                ui.label(tr("Speed"));
+                ui.add(egui::DragValue::new(&mut app.jog_feed).range(10.0..=30_000.0).suffix(" mm/min"));
             });
-            ui.label(tr("Speed"));
-            ui.add(egui::DragValue::new(&mut app.jog_feed).range(10.0..=30_000.0).suffix(" mm/min"));
-        });
+        }
         let mut here = app.move_head_mode;
         if ui.checkbox(&mut here, tr("Click the canvas to move the laser there")).changed() {
             app.move_head_mode = here;
@@ -769,20 +772,24 @@ fn jog_pad(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         // Directions are in workspace terms: "up" is toward the top of the canvas.
         let rows: [[Option<(f64, f64)>; 3]; 3] =
             [[None, Some((0.0, -1.0)), None], [Some((-1.0, 0.0)), None, Some((1.0, 0.0))], [None, Some((0.0, 1.0)), None]];
-        egui::Grid::new("jog_grid").spacing([2.0, 2.0]).show(ui, |ui| {
-            for cells in rows {
-                for cell in cells {
-                    if let Some((wx, wy)) = cell {
-                        if arrow_button(ui, wx, wy).clicked() {
-                            jog(app, wx, wy);
+        if app.classic_pad {
+            egui::Grid::new("jog_grid").spacing([2.0, 2.0]).show(ui, |ui| {
+                for cells in rows {
+                    for cell in cells {
+                        if let Some((wx, wy)) = cell {
+                            if arrow_button(ui, wx, wy).clicked() {
+                                jog(app, wx, wy);
+                            }
+                        } else {
+                            ui.allocate_space(egui::vec2(34.0, 28.0));
                         }
-                    } else {
-                        ui.allocate_space(egui::vec2(34.0, 28.0));
                     }
+                    ui.end_row();
                 }
-                ui.end_row();
-            }
-        });
+            });
+        } else {
+            crate::jog_dial::show(app, ui);
+        }
         ui.horizontal_wrapped(|ui| {
             if ui.button(tr("Home")).on_hover_text(tr("Run the homing cycle ($H)")).clicked() {
                 app.link_do(Link::home);
