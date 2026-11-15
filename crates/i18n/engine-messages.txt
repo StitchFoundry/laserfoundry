@@ -73,6 +73,7 @@ feed rate {0} is not a finite positive number
 file error: {0}
 file is larger than {1} MB
 file is not a LaserFoundry document
+finish_x and finish_y must be finite numbers
 gap must be a finite number
 give a path, or include: true to get the text
 give at least one of min_width, max_width, min_height, max_height
