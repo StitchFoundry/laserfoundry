@@ -8,6 +8,7 @@ mod font_ui;
 mod geometry;
 mod head_ui;
 mod history_ui;
+mod jog_dial;
 /// Translation catalogs live in their own crate so the command line can use them too.
 pub(crate) mod i18n {
     pub use laserfoundry_i18n::*;
@@ -159,6 +160,10 @@ pub struct LaserFoundryApp {
     text_buffer: Option<(laserfoundry_doc::ShapeId, String)>,
     text_warning: Option<String>,
     jog_step: f64,
+    /// Step and feed of each ring of the jog dial.
+    ring_steps: [jog_dial::Ring; jog_dial::RING_COUNT],
+    /// Show the arrow pad instead of the ring dial.
+    classic_pad: bool,
     offset_distance: f64,
     corner_radius: f64,
     array_columns: u32,
@@ -372,6 +377,8 @@ impl LaserFoundryApp {
             text_buffer: None,
             text_warning: None,
             jog_step: 1.0,
+            ring_steps: jog_dial::DEFAULT_RINGS,
+            classic_pad: false,
             offset_distance: 1.0,
             corner_radius: 0.0,
             array_columns: 3,
