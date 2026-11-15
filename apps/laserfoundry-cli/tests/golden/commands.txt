@@ -54,6 +54,9 @@ edit.history_goto
 command.batch
 layer.set
 layer.move
+layer.sub_add
+layer.sub_remove
+layer.sub_move
 machine.set
 file.new
 file.open
