@@ -7,6 +7,9 @@ use laserfoundry_fontlib::FontLibError;
 use laserfoundry_mcp::link::LinkServer;
 use laserfoundry_ui_egui::{FontDownload, FontDownloadFailure, LaserFoundryApp, Platform};
 
+/// One remembered setting (key and value together) larger than this is refused.
+const MAX_SETTING_BYTES: usize = 4096;
+
 pub struct Host {
     pub app: LaserFoundryApp,
     /// Present only when the person switched agent access on; closing the app closes it.
@@ -32,6 +35,8 @@ pub struct DesktopPlatform {
     font_job: Mutex<Option<mpsc::Receiver<Result<FontDownload, FontDownloadFailure>>>>,
     /// The AI or account request in flight, if any: its answer arrives here.
     http_job: Mutex<Option<mpsc::Receiver<HttpAnswer>>>,
+    /// Where small remembered settings (the control box's place, per machine) are kept; `None` uses the data folder.
+    settings_file: Option<PathBuf>,
 }
 
 impl Platform for DesktopPlatform {
@@ -144,6 +149,22 @@ impl Platform for DesktopPlatform {
         Some(data_dir()?.join("LaserFoundry").join("ai-log.jsonl"))
     }
 
+    fn storage_get(&self, key: &str) -> Option<String> {
+        crate::net::secret_get(&self.settings_file()?, key)
+    }
+
+    fn storage_set(&self, key: &str, value: &str) {
+        // The key holds the machine's name, which comes from a project file.
+        if key.len().saturating_add(value.len()) > MAX_SETTING_BYTES {
+            log::warn!("a setting of {} bytes is too large to remember", key.len().saturating_add(value.len()));
+            return;
+        }
+        let Some(path) = self.settings_file() else { return };
+        if let Err(e) = crate::net::secret_set(&path, key, value) {
+            log::warn!("could not remember a setting: {e}");
+        }
+    }
+
     fn secret_get(&self, key: &str) -> Option<String> {
         crate::net::secret_get(&data_dir()?.join("LaserFoundry").join("secrets.json"), key)
     }
@@ -195,6 +216,12 @@ impl Platform for DesktopPlatform {
 }
 
 /// The interface words a failed font download in the person's language, so only what went wrong is passed on.
+impl DesktopPlatform {
+    fn settings_file(&self) -> Option<PathBuf> {
+        self.settings_file.clone().or_else(|| Some(data_dir()?.join("LaserFoundry").join("settings.json")))
+    }
+}
+
 fn failure(error: FontLibError) -> FontDownloadFailure {
     match error {
         FontLibError::Network(detail) => FontDownloadFailure::Unreachable(detail),
@@ -240,6 +267,20 @@ fn make_private(dir: &std::path::Path) -> std::io::Result<()> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_are_remembered_between_runs() {
+        let dir = std::env::temp_dir().join(format!("lf-settings-{}", std::process::id()));
+        let file = dir.join("settings.json");
+        let platform = || DesktopPlatform { settings_file: Some(file.clone()), ..DesktopPlatform::default() };
+        platform().storage_set("control_box:Diode", "pinned=1 shown=1 x=40 y=60");
+        platform().storage_set("control_box:CO2", "pinned=0 shown=0");
+        assert_eq!(platform().storage_get("control_box:Diode").as_deref(), Some("pinned=1 shown=1 x=40 y=60"));
+        assert_eq!(platform().storage_get("control_box:CO2").as_deref(), Some("pinned=0 shown=0"));
+        platform().storage_set(&"x".repeat(MAX_SETTING_BYTES), "1");
+        assert_eq!(platform().storage_get(&"x".repeat(MAX_SETTING_BYTES)), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn the_data_folder_becomes_owner_only() {
