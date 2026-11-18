@@ -137,23 +137,32 @@ fn outline(w: f64, h: f64, edges: &[Edge; 4], t: f64, finger: f64) -> Vec<Point>
 
 /// Drops repeated points and points in the middle of a straight run.
 fn tidy(pts: Vec<Point>) -> Vec<Point> {
-    let mut dedup: Vec<Point> = Vec::new();
-    for p in pts {
-        if dedup.last().is_none_or(|q| q.distance(p) > EPS) {
-            dedup.push(p);
+    let mut cur = pts;
+    // A slot that ends on a corner leaves a zero-width spike (out to the corner and straight back):
+    // dropping the spike's tip leaves two equal points, so repeat until nothing more changes.
+    loop {
+        let mut dedup: Vec<Point> = Vec::new();
+        for p in &cur {
+            if dedup.last().is_none_or(|q| q.distance(*p) > EPS) {
+                dedup.push(*p);
+            }
         }
+        while dedup.len() > 1 && dedup.first().zip(dedup.last()).is_some_and(|(a, b)| a.distance(*b) <= EPS) {
+            dedup.pop();
+        }
+        let n = dedup.len();
+        let next: Vec<Point> = (0..n)
+            .filter_map(|i| {
+                let (p, a, b) = (dedup.get(i)?, dedup.get((i + n - 1) % n)?, dedup.get((i + 1) % n)?);
+                let cross = (*p - *a).cross(*b - *p);
+                (cross.abs() > EPS).then_some(*p)
+            })
+            .collect();
+        if next.len() == cur.len() {
+            return next;
+        }
+        cur = next;
     }
-    while dedup.len() > 1 && dedup.first().zip(dedup.last()).is_some_and(|(a, b)| a.distance(*b) <= EPS) {
-        dedup.pop();
-    }
-    let n = dedup.len();
-    (0..n)
-        .filter_map(|i| {
-            let (p, a, b) = (dedup.get(i)?, dedup.get((i + n - 1) % n)?, dedup.get((i + 1) % n)?);
-            let cross = (*p - *a).cross(*b - *p);
-            (cross.abs() > EPS).then_some(*p)
-        })
-        .collect()
 }
 
 /// Moves a counter-clockwise rectilinear outline out by `half` (the corner offset is exact for right angles).
