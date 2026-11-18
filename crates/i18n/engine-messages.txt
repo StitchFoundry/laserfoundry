@@ -33,6 +33,7 @@ This design is too big for MakerFoundry (the limit is 8 MB): remove some detail 
 Type a question first.
 a batch may hold at most {MAX_BATCH} commands
 a boolean needs at least two shapes
+a box side may not be longer than 10000 mm
 a coordinate is not a finite number
 a font library folder cannot be used as a fallback font
 a group needs at least two shapes
@@ -52,6 +53,8 @@ an open path needs a positive offset distance (it becomes the outline around the
 at most {MAX_PRESETS} presets can be kept
 bad parameters: {0}
 batches cannot be nested
+box sizes must be finite numbers
+box sizes, material thickness and finger width must be above zero and kerf must not be negative
 cannot generate G-code: {0}
 cannot open the font {path}: {e}
 cannot plan the job: {0}
@@ -159,6 +162,7 @@ the download was cancelled
 the drawing is too complex to import: {0}
 the file has no ENTITIES section
 the file is too large
+the fingers are too narrow for this kerf: use a wider finger width or a smaller kerf
 the font file is too large
 the font library is larger than this program will download; refusing
 the font library listing is not what was expected: {0}
