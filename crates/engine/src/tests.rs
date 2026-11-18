@@ -788,6 +788,25 @@ mod nest_tests {
     }
 
     #[test]
+    fn nesting_reports_how_much_of_the_sheet_the_parts_use() {
+        let mut s = Session::new();
+        let part = block(&mut s, 300.0, 300.0, 100.0, 50.0);
+        let result = s.execute("arrange.nest", &json!({"ids": [part], "x": 0, "y": 0, "width": 200, "height": 100, "rotations": 1})).unwrap();
+        let near = |v: &Value, want: f64| v.as_f64().is_some_and(|x| (x - want).abs() < 1e-6);
+        assert!(
+            near(&result["used_area_mm2"], 5000.0) && near(&result["region_area_mm2"], 20000.0) && near(&result["used_percent"], 25.0),
+            "{result}"
+        );
+        assert!(near(&result["sheet_use"][0]["used_percent"], 25.0), "{result}");
+        assert_eq!(result["sheet_use"].as_array().map(Vec::len), Some(1));
+
+        // Nothing placed: no sheet is used and the figures are zero, not a division by zero.
+        s.execute("edit.undo", &Value::Null).unwrap();
+        let big = s.execute("arrange.nest", &json!({"ids": [part], "width": 50, "height": 50, "rotations": 1})).unwrap();
+        assert!(near(&big["used_percent"], 0.0) && near(&big["region_area_mm2"], 0.0), "{big}");
+    }
+
+    #[test]
     fn parts_that_do_not_fit_go_on_further_sheets_laid_out_to_the_right() {
         let mut s = Session::new();
         s.execute("machine.set", &json!({"bed_width": 70, "bed_height": 40})).unwrap();

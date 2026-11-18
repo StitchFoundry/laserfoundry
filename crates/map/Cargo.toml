@@ -1,0 +1,13 @@
+[package]
+name = "laserfoundry-map"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LaserFoundry map data: a bounded GeoJSON importer"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+thiserror = { workspace = true }

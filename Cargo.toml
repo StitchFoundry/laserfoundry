@@ -25,6 +25,7 @@ laserfoundry-nest = { path = "crates/nest" }
 laserfoundry-icon = { path = "crates/icon" }
 laserfoundry-pathops = { path = "crates/pathops" }
 laserfoundry-gcode = { path = "crates/gcode" }
+laserfoundry-map = { path = "crates/map" }
 laserfoundry-svg = { path = "crates/svg" }
 laserfoundry-dxf = { path = "crates/dxf" }
 laserfoundry-format = { path = "crates/format" }

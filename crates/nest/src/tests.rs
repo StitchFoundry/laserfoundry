@@ -113,6 +113,31 @@ fn check(parts: &[Part], result: &Nesting, region: Rect, options: &Options) {
     }
 }
 
+mod area_tests {
+    use super::*;
+
+    #[test]
+    fn a_rectangle_covers_its_width_times_height() {
+        assert!((part_area(&rect(5.0, 7.0, 100.0, 50.0)) - 5000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_hole_is_not_material_and_open_outlines_add_nothing() {
+        let mut plate = rect(0.0, 0.0, 60.0, 60.0);
+        plate.outlines.extend(rect(10.0, 10.0, 40.0, 40.0).outlines);
+        assert!((part_area(&plate) - (3600.0 - 1600.0)).abs() < 1e-9);
+        plate.outlines.extend(line((0.0, 0.0), (100.0, 100.0)).outlines);
+        assert!((part_area(&plate) - 2000.0).abs() < 1e-9);
+        assert_eq!(part_area(&line((0.0, 0.0), (5.0, 5.0))), 0.0);
+        assert_eq!(part_area(&Part::default()), 0.0);
+    }
+
+    #[test]
+    fn a_non_finite_coordinate_counts_as_nothing() {
+        assert_eq!(part_area(&rect(0.0, 0.0, f64::NAN, 5.0)), 0.0);
+    }
+}
+
 mod packing_tests {
     use super::*;
 
