@@ -90,6 +90,7 @@ invalid document: {0}
 job cancelled
 job contains a non-finite coordinate
 job has more than {MAX_MOVES} moves
+laser power {0}% is outside the 0–100% range
 layer {1} does not exist
 layer {1} has no sub-layer {i}
 layer {id} does not exist
