@@ -3,8 +3,8 @@
 mod ai;
 mod arrange;
 mod edit;
-mod fittest;
 pub(crate) mod file;
+mod fittest;
 mod help;
 mod image;
 mod job;
