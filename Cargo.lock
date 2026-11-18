@@ -1905,6 +1905,7 @@ dependencies = [
  "laserfoundry-engine",
  "laserfoundry-fontlib",
  "laserfoundry-format",
+ "laserfoundry-map",
  "laserfoundry-mcp",
  "laserfoundry-svg",
  "laserfoundry-text",
@@ -1944,6 +1945,14 @@ name = "laserfoundry-icon"
 version = "0.5.0"
 dependencies = [
  "image",
+]
+
+[[package]]
+name = "laserfoundry-map"
+version = "0.5.0"
+dependencies = [
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
