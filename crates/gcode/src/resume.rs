@@ -73,6 +73,7 @@ pub fn resume_from(program: &str, line: usize) -> Result<String, ResumeError> {
     let mut fix_first_cut = true;
     for raw in lines.iter().skip(line - 1) {
         let code = code_of(raw);
+        let code = code.as_str();
         // The skipped part set zero (G92) already; doing it again would move the origin.
         if st.zero_set && code.starts_with("G92") {
             continue;
@@ -105,8 +106,24 @@ fn with_power_zero(line: &str) -> String {
     words.join(" ")
 }
 
-fn code_of(raw: &str) -> &str {
-    raw.split(';').next().unwrap_or("").trim()
+/// The line without its comments: `;` to the end of the line, and `(...)` (an unclosed `(` runs to the end).
+/// A parenthesised comment becomes a space so the words around it stay separate.
+fn code_of(raw: &str) -> String {
+    let mut out = String::new();
+    let mut in_paren = false;
+    for c in raw.chars() {
+        match c {
+            ')' if in_paren => {
+                in_paren = false;
+                out.push(' ');
+            }
+            _ if in_paren => {}
+            '(' => in_paren = true,
+            ';' => break,
+            _ => out.push(c),
+        }
+    }
+    out.trim().to_string()
 }
 
 fn has_word(code: &str, letter: char) -> bool {
@@ -116,6 +133,7 @@ fn has_word(code: &str, letter: char) -> bool {
 /// Applies one line to the tracked state. `None` means the line is something we cannot follow.
 fn track(st: &mut State, raw: &str) -> Option<()> {
     let code = code_of(raw);
+    let code = code.as_str();
     if code.is_empty() {
         return Some(());
     }
@@ -268,13 +286,19 @@ mod tests {
         }
 
         #[test]
-        fn semicolon_comments_are_ignored_and_parenthesised_ones_are_refused() {
-            // The generator only writes `;` comments, so a `(...)` line is not one of ours.
+        fn semicolon_and_parenthesised_comments_are_ignored() {
             let p = "G21\nG90\nM4 S0\n; G0 X999 Y999\nG0 X5 Y5\nG1 X9 S100 F500\n";
             let r = resume_from(p, 6).unwrap();
             assert!(r.contains("G0 X5 Y5\n") && !r.contains("999"), "{r}");
-            let q = "G21\nG90\n(G0 X888 Y888)\nG0 X5 Y5\nG1 X9 S100 F500\n";
-            assert_eq!(resume_from(q, 5), Err(ResumeError::Unsupported(3)));
+            // A hand-edited program: a whole-line comment, a trailing one and one between words.
+            let q = "(job: badge)\nG21\nG90 (absolute)\n(G0 X888 Y888)\nG0 X5 (start) Y5\nG1 X9 S100 F500\n";
+            let r = resume_from(q, 6).unwrap();
+            assert!(r.contains("G0 X5 Y5\n") && !r.contains("888"), "{r}");
+            assert!(r.contains("G1 X9 S100 F500\n"), "{r}");
+            // An unclosed comment runs to the end of the line; a `;` inside parentheses does not start a second one.
+            let s = "G21\n(open G0 X777\nG0 X5 (a;b) Y5\nG1 X9 S100 F500\n";
+            let r = resume_from(s, 4).unwrap();
+            assert!(r.contains("G0 X5 Y5\n") && !r.contains("777"), "{r}");
         }
 
         #[test]
