@@ -96,6 +96,12 @@ pub struct Grid {
 pub fn sample_grid(shape: &Shape, grid: &Grid) -> Vec<f32> {
     let mut out = vec![255.0f32; grid.nx.saturating_mul(grid.ny)];
     let ShapeKind::Image { image: img, width_mm: w_mm, height_mm: h_mm, adjust } = &shape.kind else { return out };
+    // A picture from a hostile project file: no pixels, a short pixel buffer or a non-finite/zero size burns nothing.
+    let pixels = (img.width as usize).saturating_mul(img.height as usize);
+    let size_ok = w_mm.is_finite() && h_mm.is_finite() && *w_mm > 0.0 && *h_mm > 0.0;
+    if img.width == 0 || img.height == 0 || img.gray.len() < pixels || !size_ok {
+        return out;
+    }
     let inv = shape.transform.inverse();
     for iy in 0..grid.ny {
         for ix in 0..grid.nx {
