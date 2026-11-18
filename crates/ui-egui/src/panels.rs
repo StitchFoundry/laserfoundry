@@ -511,6 +511,7 @@ fn laser(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     crate::register_ui::section(app, ui);
     cut_order(app, ui);
     test_grid_section(app, ui);
+    box_maker_section(app, ui);
     ui.separator();
     job_controls(app, ui);
     if app.link.is_some() {
@@ -1430,6 +1431,30 @@ fn test_grid_section(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
                 "speed_min": app.grid_speed.0, "speed_max": app.grid_speed.1, "power_min": app.grid_power.0, "power_max": app.grid_power.1,
             });
             app.run("generate.test_grid", params);
+        }
+    });
+}
+
+/// Finger-jointed box panels as cut paths.
+fn box_maker_section(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
+    ui.collapsing(tr("Box maker"), |ui| {
+        ui.horizontal(|ui| {
+            for (v, prefix) in app.box_size.iter_mut().zip(["width ", "depth ", "height "]) {
+                ui.add(egui::DragValue::new(v).range(1.0..=2000.0).prefix(prefix));
+            }
+        });
+        ui.horizontal(|ui| {
+            for (v, prefix) in app.box_material.iter_mut().zip(["thickness ", "kerf ", "finger "]) {
+                ui.add(egui::DragValue::new(v).range(0.0..=100.0).speed(0.05).prefix(prefix));
+            }
+        });
+        ui.checkbox(&mut app.box_lid, tr("Lid"));
+        if ui.button(tr("Create on the active layer")).on_hover_text(tr("Inside size in mm; panels are laid out with a gap")).clicked() {
+            let params = json!({
+                "width": app.box_size[0], "depth": app.box_size[1], "height": app.box_size[2], "thickness": app.box_material[0],
+                "kerf": app.box_material[1], "finger": app.box_material[2], "lid": app.box_lid, "layer": app.active_layer,
+            });
+            app.run("generate.box", params);
         }
     });
 }
