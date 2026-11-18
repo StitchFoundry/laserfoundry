@@ -1581,6 +1581,20 @@ mod shortcut_tests {
     }
 
     #[test]
+    fn the_fit_test_window_stays_open_and_its_card_runs_the_command() {
+        let mut h = Harness::new();
+        h.app.fit_test_open = true;
+        h.frame(vec![]);
+        assert!(h.app.fit_test_open, "the window stays open across frames");
+        h.app.fit_card.count = 5;
+        let params = h.app.fit_card.params(h.app.active_layer);
+        assert_eq!(params["count"], 5);
+        assert_eq!(params["thickness"], 3.0);
+        let result = h.app.run("generate.fit_test", params).unwrap();
+        assert_eq!(result["slots"].as_array().map(Vec::len), Some(5));
+    }
+
+    #[test]
     fn the_font_manager_draws_samples_and_knows_the_selected_texts_font() {
         let mut h = Harness::new();
         assert_eq!(crate::font_ui::selected_text_font(&h.app), None, "nothing selected");

@@ -27,6 +27,7 @@ mod platform;
 mod recent;
 mod recovery;
 mod register_ui;
+mod fit_test_ui;
 mod select_size_ui;
 mod settings_ui;
 mod shortcuts;
@@ -225,6 +226,8 @@ pub struct LaserFoundryApp {
     /// The machine setup wizard.
     wizard: machine_setup::Wizard,
     select_size_open: bool,
+    fit_test_open: bool,
+    fit_card: fit_test_ui::FitCard,
     fonts_open: bool,
     font_manager: font_ui::FontManager,
     size_filter: select_size_ui::SizeFilter,
@@ -432,6 +435,8 @@ impl LaserFoundryApp {
             history_open: false,
             wizard: machine_setup::Wizard::default(),
             select_size_open: false,
+            fit_test_open: false,
+            fit_card: fit_test_ui::FitCard::default(),
             fonts_open: false,
             font_manager: font_ui::FontManager::default(),
             size_filter: select_size_ui::SizeFilter::default(),
@@ -941,6 +946,7 @@ impl LaserFoundryApp {
         history_ui::window(self, ctx);
         machine_setup::window(self, ctx);
         select_size_ui::window(self, ctx);
+        fit_test_ui::window(self, ctx);
         font_ui::window(self, ctx);
         if self.pending_recovery.is_some() {
             let mut choice = None;
