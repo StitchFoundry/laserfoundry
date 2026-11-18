@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use laserfoundry_doc::{Document, ShapeKind};
+use laserfoundry_doc::{Document, LAYER_COLORS, Layer, LayerId, ShapeKind};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -94,7 +94,7 @@ pub fn read_capped(path: &Path, limit: u64) -> std::io::Result<Option<Vec<u8>>> 
     Ok((bytes.len() as u64 <= limit).then_some(bytes))
 }
 
-/// Repairs what can be repaired (dangling layers, id counter) and rejects what cannot.
+/// Repairs what can be repaired (dangling layers, missing palette layers, id counter) and rejects what cannot.
 fn validate(doc: &mut Document) -> Result<(), FormatError> {
     let m = &doc.machine;
     if !(m.bed_width.is_finite() && m.bed_width > 0.0 && m.bed_height.is_finite() && m.bed_height > 0.0) {
@@ -105,6 +105,13 @@ fn validate(doc: &mut Document) -> Result<(), FormatError> {
     }
     if doc.layers.is_empty() {
         return Err(FormatError::Invalid("document has no layers"));
+    }
+    // Files saved before the palette grew (16 layers up to v0.4) get the missing layers, so imports that
+    // pick a layer by palette position do not fall back to layer 0.
+    for id in 0..LAYER_COLORS.len() as LayerId {
+        if doc.layer(id).is_none() {
+            doc.layers.push(Layer::numbered(id));
+        }
     }
     let first_layer = doc.layers.first().map(|l| l.id).unwrap_or(0);
     let layer_ids: Vec<_> = doc.layers.iter().map(|l| l.id).collect();

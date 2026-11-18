@@ -1217,6 +1217,25 @@ mod import_tests {
     }
 
     #[test]
+    fn a_project_saved_with_sixteen_layers_opens_with_all_thirty() {
+        // Projects saved before the limit went from 16 to 30 hold 16 layers. Imports map DXF layers and
+        // palette colours to ids up to 29; a missing layer sent those shapes to layer 0 without a word.
+        let mut old = Session::new();
+        old.doc.layers.truncate(16);
+        let data = old.execute("file.project_data", &json!({})).unwrap()["data_base64"].clone();
+        let mut s = Session::new();
+        s.execute("file.open", &json!({"data_base64": data})).unwrap();
+        assert_eq!(s.doc.layers.len(), laserfoundry_doc::LAYER_COLORS.len());
+        let mut d = String::from("0\nSECTION\n2\nENTITIES\n");
+        for i in 0..20 {
+            d.push_str(&format!("0\nLINE\n8\nL{i}\n10\n0\n20\n{i}\n11\n10\n21\n{i}\n"));
+        }
+        s.execute("file.import_dxf", &json!({"data": d + "0\nENDSEC\n0\nEOF\n", "join": false})).unwrap();
+        let layers: Vec<_> = s.doc.shapes.iter().map(|sh| sh.layer).collect();
+        assert_eq!(layers, (0..20).collect::<Vec<_>>());
+    }
+
+    #[test]
     fn four_loose_dxf_lines_import_as_one_closed_fillable_shape() {
         let line = |x1: f64, y1: f64, x2: f64, y2: f64| format!("0\nLINE\n8\nCUT\n10\n{x1}\n20\n{y1}\n11\n{x2}\n21\n{y2}\n");
         let dxf = format!(
