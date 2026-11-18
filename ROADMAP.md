@@ -15,7 +15,12 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
 
 ## Progress log
 
+<<<<<<< HEAD
 - **2026-11-18 — Nesting shows material used (#151, slice 1).** `arrange.nest` returns `used_area_mm2`, `region_area_mm2` and `used_percent` overall and per sheet (`sheet_use`); the area is that of the placed parts' closed outlines with holes subtracted (`laserfoundry_nest::part_area`), the region area is the whole region including margin. The status line reads e.g. "Placed 3 in the bed, 28% of the sheet used". No new engine error messages, so `engine-messages.txt` is unchanged. **Not run locally, CI is the first run; not done:** the golden command snapshot needs re-recording (`params_doc` changed), sheet size presets (slice 2) and per-sheet export (slice 3).
+=======
+- **2026-11-18 — Layered maps, phase 1 (#150): `laserfoundry-map` crate.** Data model (`LonLat`, `Geometry`, `Feature`, `MapData`) and `import_geojson`, a bounded GeoJSON reader (caps on bytes, features, vertices per feature, geometry nesting and tags; finite, in-range coordinates; no indexing with data), plus `OSM_CREDIT` and the ODbL attribution note in the module docs. Classified in `xtask` layers (L3) and wasm; `fuzzkit::map_geojson` with a mutation test and a `fuzz/` target. Unit tests include hostile inputs. OSM XML is not included (no XML parser in the workspace). **Not run locally, CI is the first run; not done:** phases 2 to 7 (projection, roads, layers, command, network, UI).
+
+>>>>>>> origin/main
 - **2026-11-18 — Fix #37: G-code refuses out-of-range power.** `Writer::cut` returns the new `GcodeError::BadPower` for a finite power outside 0..=100 % (1e-6 slack) instead of clamping, for jobs and `frame`; the two tests that pinned clamping now pin refusal. The error reaches the UI as `EngineError::Gcode` through the existing command error path (no new UI code). `crates/i18n/engine-messages.txt` was edited by hand to match the generator (sorted, `{0}` kept). **Not run locally, CI is the first run; not checked:** the message on screen.
 - **2026-11-18 — Fit test card, part 1 (#145): `generate.fit_test` command.** New `crates/engine/src/cmd/fittest.rs`: a row of blocks, each with a slot stepped around the material thickness (default 3 mm, 0.05 step, 9 slots), engraved width labels, and the kerf each slot would imply in the result. Hostile-parameter and label tests included. No machine motion. **Not run locally, CI is the first run; not done:** the Tools > Fit test card dialog (part 2), feeding the kerf into settings and the box maker, a real cut.
 

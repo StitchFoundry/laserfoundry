@@ -27,6 +27,11 @@ pub fn dxf(data: &[u8]) {
     let _ = laserfoundry_dxf::import_dxf(data);
 }
 
+/// Untrusted GeoJSON map data.
+pub fn map_geojson(data: &[u8]) {
+    let _ = laserfoundry_map::import_geojson(data);
+}
+
 /// An untrusted `.laserfoundry` file, loaded and, when it loads, planned (as `laserfoundry-cli info` and `gcode` do).
 pub fn project(data: &[u8]) {
     if let Ok(doc) = laserfoundry_format::from_bytes(data) {
@@ -239,6 +244,7 @@ mod tests {
     const DXF: &str = "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n10\n21\n10\n0\nCIRCLE\n8\n0\n10\n5\n20\n5\n40\n3\n0\nLWPOLYLINE\n8\n0\n90\n3\n70\n1\n10\n0\n20\n0\n10\n4\n20\n0\n10\n4\n20\n4\n0\nENDSEC\n0\nEOF\n";
     /// Blocks, inserts, an ellipse and a spline: the parts of the DXF reader with the most arithmetic.
     const DXF_RICH: &str = "0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nB\n10\n0\n20\n0\n0\nLINE\n10\n0\n20\n0\n11\n5\n21\n5\n0\nINSERT\n2\nB\n0\nENDBLK\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nINSERT\n2\nB\n10\n3\n20\n4\n41\n2\n42\n2\n50\n30\n0\nELLIPSE\n10\n0\n20\n0\n11\n9\n21\n1\n40\n0.4\n41\n0\n42\n3\n0\nSPLINE\n70\n8\n71\n3\n40\n0\n40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n40\n1\n41\n1\n41\n2\n41\n1\n41\n1\n10\n0\n20\n0\n10\n1\n20\n3\n10\n2\n20\n3\n10\n3\n20\n0\n0\nENDSEC\n0\nEOF\n";
+    const MAP_GEOJSON: &str = r#"{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"highway":"primary","lanes":2},"geometry":{"type":"LineString","coordinates":[[8.5,47.3],[8.6,47.4]]}},{"type":"Feature","properties":{},"geometry":{"type":"MultiPolygon","coordinates":[[[[0,0],[1,0],[1,1],[0,0]]]]}},{"type":"GeometryCollection","geometries":[{"type":"Point","coordinates":[1,2]}]}]}"#;
     const GCODE: &str = "G21\nG90\nM4 S0\nG0 X10 Y10\nG1 X20 Y10 S500 F1000\nG1 X20 Y20\nM5\nG0 X0 Y0\n";
     const STATUS: &str = "<Idle|MPos:1.000,2.000,0.000|FS:0,0>\n$130=410.000\n$32=1\nok\nerror:20\nALARM:1\n<Run,MPos:1.000,2.000,0.000,WPos:0.000,0.000,0.000>\nX:10.00 Y:20.50 Z:0.00 E:0.00 Count X:800 Y:1640 Z:0\nok P15 B3\necho:busy: processing\necho:Unknown command: \"M9\"\nError:Printer halted. kill() called!\nok\nok\nok\nok\nok\nok\n";
     const MCP: &str = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"shape_rectangle\",\"arguments\":{\"width\":5,\"height\":5}}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}\n";
@@ -295,6 +301,11 @@ mod tests {
     fn dxf_survives_mutation() {
         drive(DXF, dxf, 3000);
         drive(DXF_RICH, dxf, 4000);
+    }
+
+    #[test]
+    fn map_geojson_survives_mutation() {
+        drive(MAP_GEOJSON, map_geojson, 3000);
     }
 
     #[test]
