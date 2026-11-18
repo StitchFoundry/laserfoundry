@@ -793,7 +793,10 @@ mod nest_tests {
         let part = block(&mut s, 300.0, 300.0, 100.0, 50.0);
         let result = s.execute("arrange.nest", &json!({"ids": [part], "x": 0, "y": 0, "width": 200, "height": 100, "rotations": 1})).unwrap();
         let near = |v: &Value, want: f64| v.as_f64().is_some_and(|x| (x - want).abs() < 1e-6);
-        assert!(near(&result["used_area_mm2"], 5000.0) && near(&result["region_area_mm2"], 20000.0) && near(&result["used_percent"], 25.0), "{result}");
+        assert!(
+            near(&result["used_area_mm2"], 5000.0) && near(&result["region_area_mm2"], 20000.0) && near(&result["used_percent"], 25.0),
+            "{result}"
+        );
         assert!(near(&result["sheet_use"][0]["used_percent"], 25.0), "{result}");
         assert_eq!(result["sheet_use"].as_array().map(Vec::len), Some(1));
 

@@ -259,7 +259,9 @@ fn nest(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
             placements.push(placement);
         }
         used_total += used;
-        sheet_use.push(json!({ "placed": per_sheet.last(), "used_area_mm2": used, "region_area_mm2": region_area, "used_percent": percent(used, region_area) }));
+        sheet_use.push(
+            json!({ "placed": per_sheet.last(), "used_area_mm2": used, "region_area_mm2": region_area, "used_percent": percent(used, region_area) }),
+        );
         remaining = result.unplaced.iter().filter_map(|i| remaining.get(*i).copied()).collect();
     }
 

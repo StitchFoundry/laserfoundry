@@ -2077,7 +2077,12 @@ mod timeline_ui_tests {
         h.app.run("edit.select_all", Value::Null);
         h.app.nest_sheets = 2;
         crate::panels::nest_selection(&mut h.app);
-        assert_eq!(h.app.status, Some(("Placed 4 on 2 sheets, 64% of the sheets used; 1 did not fit and are selected".into(), false)), "{:?}", h.app.status);
+        assert_eq!(
+            h.app.status,
+            Some(("Placed 4 on 2 sheets, 64% of the sheets used; 1 did not fit and are selected".into(), false)),
+            "{:?}",
+            h.app.status
+        );
         h.app.run("edit.select_all", Value::Null);
         h.app.nest_sheets = 3;
         crate::panels::nest_selection(&mut h.app);

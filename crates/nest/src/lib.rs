@@ -132,7 +132,8 @@ pub fn part_area(part: &Part) -> f64 {
         if !outline.closed || outline.points.len() < 3 {
             continue;
         }
-        let twice: f64 = outline.points.iter().zip(outline.points.iter().cycle().skip(1)).take(outline.points.len()).map(|(a, b)| a.x * b.y - b.x * a.y).sum();
+        let twice: f64 =
+            outline.points.iter().zip(outline.points.iter().cycle().skip(1)).take(outline.points.len()).map(|(a, b)| a.x * b.y - b.x * a.y).sum();
         let hole = depths.as_ref().and_then(|d| d.get(i)).is_some_and(|depth| depth % 2 == 1);
         total += if hole { -twice.abs() / 2.0 } else { twice.abs() / 2.0 };
     }
