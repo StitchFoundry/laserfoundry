@@ -10,6 +10,7 @@ text.edit
 shape.cut_override
 shape.set_order
 generate.test_grid
+generate.fit_test
 path.boolean
 path.join
 path.offset
