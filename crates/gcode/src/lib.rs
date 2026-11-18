@@ -18,6 +18,8 @@ use thiserror::Error;
 pub const MAX_FEED: f64 = 1_000_000.0;
 /// Slack (mm) allowed outside the bed before a job is refused.
 const BED_EPSILON: f64 = 1e-3;
+/// Slack (percent) allowed outside 0..=100 for rounding noise before a power is refused.
+const POWER_EPSILON: f64 = 1e-6;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum GcodeError {
@@ -33,6 +35,8 @@ pub enum GcodeError {
     BadMachine(&'static str),
     #[error("the job is {w:.1}×{h:.1} mm, larger than the {bw:.0}×{bh:.0} mm work area")]
     JobLargerThanBed { w: f64, h: f64, bw: f64, bh: f64 },
+    #[error("laser power {0}% is outside the 0–100% range")]
+    BadPower(f64),
 }
 
 /// Where machine coordinates come from.
@@ -220,6 +224,9 @@ impl<'a> Writer<'a> {
     fn cut(&mut self, p: Point, power: f64, speed: f64) -> Result<(), GcodeError> {
         if !power.is_finite() {
             return Err(GcodeError::NonFinite);
+        }
+        if !(-POWER_EPSILON..=100.0 + POWER_EPSILON).contains(&power) {
+            return Err(GcodeError::BadPower(power));
         }
         let (x, y) = self.to_machine(p)?;
         let (sv, text) = self.power_word(power);
@@ -648,9 +655,9 @@ G0 X0 Y0
         }
 
         #[test]
-        fn zero_passes_still_run_once_and_a_huge_power_is_capped() {
+        fn zero_passes_still_run_once_and_a_huge_power_is_refused() {
             let m = Machine::default();
-            let op = Op {
+            let op = |power: f64| Op {
                 layer: 0,
                 kind: OpKind::Line,
                 speed: 1000.0,
@@ -658,11 +665,15 @@ G0 X0 Y0
                 air_assist: false,
                 z: 0.0,
                 z_per_pass: 0.0,
-                moves: vec![Move::Travel(Point::new(1.0, 1.0)), Move::Cut { to: Point::new(5.0, 5.0), power: 1e9 }],
+                moves: vec![Move::Travel(Point::new(1.0, 1.0)), Move::Cut { to: Point::new(5.0, 5.0), power }],
             };
-            let g = generate(&Job { ops: vec![op] }, &m, Placement::Absolute).unwrap();
+            let g = generate(&Job { ops: vec![op(100.0)] }, &m, Placement::Absolute).unwrap();
             assert_eq!(g.matches("pass 1").count(), 1, "{g}");
             assert!(g.contains(&format!("S{}", m.max_s)), "{g}");
+            for bad in [1e9, -50.0, 100.01, -0.01] {
+                assert_eq!(generate(&Job { ops: vec![op(bad)] }, &m, Placement::Absolute), Err(GcodeError::BadPower(bad)), "{bad}");
+            }
+            assert!(generate(&Job { ops: vec![op(100.0 + 1e-9)] }, &m, Placement::Absolute).is_ok());
         }
     }
 
@@ -807,15 +818,15 @@ G1 X20 S"
         }
 
         #[test]
-        fn a_dry_run_frame_never_fires_and_out_of_range_power_is_capped_at_max_s() {
+        fn a_dry_run_frame_never_fires_and_out_of_range_power_is_refused() {
             let m = Machine { origin: Origin::TopLeft, ..Machine::default() };
             let b = Rect::new(10.0, 10.0, 30.0, 20.0);
             let dry = frame(b, &m, Placement::Absolute, 1000.0, 0.0).unwrap();
             assert!(!dry.lines().any(|l| l.starts_with("G1") && l.contains("S") && !l.contains("S0")), "{dry}");
-            let hot = frame(b, &m, Placement::Absolute, 1000.0, 1e9).unwrap();
-            let max = format!("S{}", m.max_s);
-            assert!(hot.contains(&max), "{hot}");
-            assert!(hot.lines().filter(|l| l.starts_with("G1")).all(|l| !l.contains(&format!("S{}", u64::from(m.max_s) + 1))), "{hot}");
+            assert_eq!(frame(b, &m, Placement::Absolute, 1000.0, 1e9), Err(GcodeError::BadPower(1e9)));
+            assert_eq!(frame(b, &m, Placement::Absolute, 1000.0, -5.0), Err(GcodeError::BadPower(-5.0)));
+            let hot = frame(b, &m, Placement::Absolute, 1000.0, 100.0).unwrap();
+            assert!(hot.contains(&format!("S{}", m.max_s)), "{hot}");
             assert!(dry.trim_end().ends_with("G0 X0 Y0") && dry.contains("\nM5\n"), "{dry}");
         }
     }
