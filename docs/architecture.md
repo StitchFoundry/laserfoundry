@@ -25,6 +25,7 @@ and that nothing below L7 depends on a UI toolkit. The table lives in `xtask/src
 | L1    | `pathops`  | boolean combine and offset on flattened shapes (wraps `i_overlay`: even-odd regions with holes, validated and bounded inputs) |
 | L3    | `svg`      | SVG import (`usvg` resolves shapes, groups, transforms, units)                                   |
 | L3    | `dxf`      | ASCII DXF import written from the public reference                                               |
+| L3    | `map`      | map data model and a bounded GeoJSON importer (OpenStreetMap credit required, see the module docs) |
 | L3    | `gcode`    | `Job` to GRBL G-code with a `Placement` (absolute, or relative to a job anchor); bed-bounds and finiteness checks; framing |
 | L3    | `format`   | the native `.laserfoundry` file: versioned JSON, atomic save, validation on load                 |
 | L3    | `device`   | `Transport` trait, GRBL character-counting streamer (`JobStream`), status parsing, the persistent `Link` (worker thread: status polling, jog/home/unlock/zero, job streaming, pause/resume/stop, console), simulated controller, optional serial port (`serial` feature) |

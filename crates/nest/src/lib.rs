@@ -122,6 +122,24 @@ pub enum NestError {
     TooComplex,
 }
 
+/// The material a part covers, mm². Closed outlines are solid and open ones add nothing. An outline inside an odd number of others
+/// of the same part is a hole and is subtracted (found as `use_holes` finds them, whether or not that option is on), so a plate with
+/// a window counts only its frame. A part with too many outlines to examine for holes counts every closed outline in full.
+pub fn part_area(part: &Part) -> f64 {
+    let depths = hole_depths(part);
+    let mut total = 0.0;
+    for (i, outline) in part.outlines.iter().enumerate() {
+        if !outline.closed || outline.points.len() < 3 {
+            continue;
+        }
+        let twice: f64 =
+            outline.points.iter().zip(outline.points.iter().cycle().skip(1)).take(outline.points.len()).map(|(a, b)| a.x * b.y - b.x * a.y).sum();
+        let hole = depths.as_ref().and_then(|d| d.get(i)).is_some_and(|depth| depth % 2 == 1);
+        total += if hole { -twice.abs() / 2.0 } else { twice.abs() / 2.0 };
+    }
+    if total.is_finite() { total.max(0.0) } else { 0.0 }
+}
+
 /// Packs `parts` into `region` (workspace mm).
 pub fn nest(parts: &[Part], region: Rect, options: &Options) -> Result<Nesting, NestError> {
     nest_around(parts, &[], region, options)

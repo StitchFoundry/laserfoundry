@@ -118,3 +118,10 @@ path = "fuzz_targets/camera_profile.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "map_geojson"
+path = "fuzz_targets/map_geojson.rs"
+test = false
+doc = false
+bench = false
