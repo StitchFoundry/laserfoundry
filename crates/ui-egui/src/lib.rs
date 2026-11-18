@@ -15,6 +15,7 @@ pub(crate) mod i18n {
 }
 mod ai_ui;
 mod browser_recent;
+mod fit_test_ui;
 mod job_position;
 mod laser_presets;
 mod machine_report;
@@ -27,7 +28,6 @@ mod platform;
 mod recent;
 mod recovery;
 mod register_ui;
-mod fit_test_ui;
 mod select_size_ui;
 mod settings_ui;
 mod shortcuts;
