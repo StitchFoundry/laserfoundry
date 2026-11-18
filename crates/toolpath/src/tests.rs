@@ -512,6 +512,32 @@ mod image_tests {
     }
 
     #[test]
+    fn sample_grid_survives_hostile_images() {
+        let grid = Grid { x0: 0.0, y0: 0.0, nx: 4, ny: 4, pitch: 1.0 };
+        let hostile: [(u32, u32, Vec<u8>, f64, f64); 8] = [
+            (0, 0, vec![], 4.0, 4.0),
+            (0, 3, vec![], 4.0, 4.0),
+            (3, 0, vec![], 4.0, 4.0),
+            (3, 3, vec![1, 2], 4.0, 4.0),
+            (2, 2, vec![0; 4], 0.0, 0.0),
+            (2, 2, vec![0; 4], f64::NAN, f64::NAN),
+            (2, 2, vec![0; 4], f64::INFINITY, 1.0),
+            (u32::MAX, u32::MAX, vec![7], 4.0, 4.0),
+        ];
+        for (w, h, gray, width_mm, height_mm) in hostile {
+            let mut doc = image_doc(vec![0; 4], 2, 2);
+            if let Some(ShapeKind::Image { image, width_mm: wm, height_mm: hm, .. }) = doc.shapes.first_mut().map(|s| &mut s.kind) {
+                *image = Arc::new(RasterImage { width: w, height: h, gray, rgb: None });
+                *wm = width_mm;
+                *hm = height_mm;
+            }
+            let cells = sample_grid(&doc.shapes[0], &grid);
+            assert_eq!(cells.len(), 16);
+            assert!(cells.iter().all(|v| v.is_finite()), "{w}x{h} {width_mm}x{height_mm}: {cells:?}");
+        }
+    }
+
+    #[test]
     fn floyd_steinberg_preserves_mean_darkness() {
         let gray = vec![128.0f32; 100 * 100];
         let out = dither(&gray, 100, 100, laserfoundry_doc::Dither::FloydSteinberg);
