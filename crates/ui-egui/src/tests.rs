@@ -1394,6 +1394,23 @@ mod group_ui_tests {
         h.frame(vec![]);
         assert!(h.app.session.doc.layer(0).is_some_and(|l| l.is_multi() && l.sub_layers.len() == 2));
     }
+
+    #[test]
+    fn every_numeric_setting_of_a_sub_layer_is_editable() {
+        let mut h = Harness::new();
+        h.app.run("layer.sub_add", json!({"id": 0}));
+        h.frame(vec![]);
+        let sub = h.app.session.doc.layer(0).and_then(|l| l.sub_layers.first().cloned()).unwrap();
+        let settings = crate::panels::numeric_settings(&sub);
+        assert!(settings.len() > 4, "more than speed, power and interval");
+        for (_, key, _, range, _) in settings {
+            let v = *range.end() * 0.5 + *range.start() * 0.5;
+            assert!(h.app.run("layer.set", json!({"id": 0, "sub": 0, key: v})).is_some(), "{key}: {:?}", h.app.status);
+        }
+        let sub = h.app.session.doc.layer(0).and_then(|l| l.sub_layers.first().cloned()).unwrap();
+        assert!((sub.lead_in - 500.0).abs() < 1e-9 && (sub.kerf_offset - 0.0).abs() < 1e-9 && (sub.z_offset - 0.0).abs() < 1e-9);
+        h.frame(vec![]);
+    }
 }
 
 mod override_and_grid_tests {

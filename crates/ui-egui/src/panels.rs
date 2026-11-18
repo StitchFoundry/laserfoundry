@@ -161,23 +161,7 @@ fn layers(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         }
         ui.end_row();
 
-        for (label, key, value, range, suffix) in [
-            ("Speed", "speed", layer.speed, 1.0..=100_000.0, " mm/min"),
-            ("Max power", "max_power", layer.max_power, 0.0..=100.0, " %"),
-            ("Min power", "min_power", layer.min_power, 0.0..=100.0, " %"),
-            ("Interval", "interval", layer.interval, 0.005..=10.0, " mm"),
-            ("Scan angle", "scan_angle", layer.scan_angle, -360.0..=360.0, "°"),
-            ("Kerf offset", "kerf_offset", layer.kerf_offset, -50.0..=50.0, " mm"),
-            ("Tab width", "tab_width", layer.tab_width, 0.0..=1000.0, " mm"),
-            ("Lead-in", "lead_in", layer.lead_in, 0.0..=1000.0, " mm"),
-            ("Lead-out", "lead_out", layer.lead_out, 0.0..=1000.0, " mm"),
-            ("Overscan", "overscan", layer.overscan.unwrap_or(0.0), 0.0..=50.0, " mm"),
-            ("Ramp length", "ramp_length", layer.ramp_length, 0.0..=1000.0, " mm"),
-            ("Z offset", "z_offset", layer.z_offset, -200.0..=200.0, " mm"),
-            ("Z per pass", "z_per_pass", layer.z_per_pass, -200.0..=200.0, " mm"),
-            ("Dash cut", "perf_cut", layer.perf_cut, 0.0..=1000.0, " mm"),
-            ("Dash gap", "perf_gap", layer.perf_gap, 0.0..=1000.0, " mm"),
-        ] {
+        for (label, key, value, range, suffix) in numeric_settings(&layer) {
             ui.label(tr(label));
             if let Some(v) = number(ui, value, range, suffix) {
                 app.run("layer.set", json!({ "id": layer.id, key: v }));
@@ -229,6 +213,29 @@ fn layers(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     presets_section(app, ui, layer.id);
 }
 
+/// The numeric cut settings of a layer or sub-layer: label, `layer.set` key, value, range, suffix.
+type NumericSetting = (&'static str, &'static str, f64, std::ops::RangeInclusive<f64>, &'static str);
+
+pub(crate) fn numeric_settings(l: &laserfoundry_doc::Layer) -> [NumericSetting; 15] {
+    [
+        ("Speed", "speed", l.speed, 1.0..=100_000.0, " mm/min"),
+        ("Max power", "max_power", l.max_power, 0.0..=100.0, " %"),
+        ("Min power", "min_power", l.min_power, 0.0..=100.0, " %"),
+        ("Interval", "interval", l.interval, 0.005..=10.0, " mm"),
+        ("Scan angle", "scan_angle", l.scan_angle, -360.0..=360.0, "°"),
+        ("Kerf offset", "kerf_offset", l.kerf_offset, -50.0..=50.0, " mm"),
+        ("Tab width", "tab_width", l.tab_width, 0.0..=1000.0, " mm"),
+        ("Lead-in", "lead_in", l.lead_in, 0.0..=1000.0, " mm"),
+        ("Lead-out", "lead_out", l.lead_out, 0.0..=1000.0, " mm"),
+        ("Overscan", "overscan", l.overscan.unwrap_or(0.0), 0.0..=50.0, " mm"),
+        ("Ramp length", "ramp_length", l.ramp_length, 0.0..=1000.0, " mm"),
+        ("Z offset", "z_offset", l.z_offset, -200.0..=200.0, " mm"),
+        ("Z per pass", "z_per_pass", l.z_per_pass, -200.0..=200.0, " mm"),
+        ("Dash cut", "perf_cut", l.perf_cut, 0.0..=1000.0, " mm"),
+        ("Dash gap", "perf_gap", l.perf_gap, 0.0..=1000.0, " mm"),
+    ]
+}
+
 /// Extra operations run on the same shapes after the layer's own, in list order.
 fn sub_layers_section(app: &mut LaserFoundryApp, ui: &mut egui::Ui, layer: &laserfoundry_doc::Layer) {
     ui.collapsing(tr("Sub-layers"), |ui| {
@@ -269,12 +276,7 @@ fn sub_layers_section(app: &mut LaserFoundryApp, ui: &mut egui::Ui, layer: &lase
                     app.run("layer.set", json!({ "id": layer.id, "sub": i, "mode": mode }));
                 }
                 ui.end_row();
-                for (label, key, value, range, suffix) in [
-                    ("Speed", "speed", sub.speed, 1.0..=100_000.0, " mm/min"),
-                    ("Max power", "max_power", sub.max_power, 0.0..=100.0, " %"),
-                    ("Min power", "min_power", sub.min_power, 0.0..=100.0, " %"),
-                    ("Interval", "interval", sub.interval, 0.005..=10.0, " mm"),
-                ] {
+                for (label, key, value, range, suffix) in numeric_settings(sub) {
                     ui.label(tr(label));
                     if let Some(v) = number(ui, value, range, suffix) {
                         app.run("layer.set", json!({ "id": layer.id, "sub": i, key: v }));
