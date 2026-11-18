@@ -1336,14 +1336,19 @@ pub(crate) fn nest_selection(app: &mut LaserFoundryApp) {
     let placed = result["placed"].as_u64().unwrap_or(0);
     let left = result["unplaced"].as_array().map_or(0, Vec::len);
     let sheets = result["per_sheet"].as_array().map_or(1, Vec::len);
-    app.say(match (sheets > 1, left == 0) {
-        (false, true) => trf!("Placed {placed} in the bed", placed = placed),
-        (false, false) => trf!("Placed {placed}; {left} did not fit and are selected", placed = placed, left = left),
-        (true, true) => trf!("Placed {placed} on {sheets} sheets", placed = placed, sheets = sheets),
-        (true, false) => {
-            trf!("Placed {placed} on {sheets} sheets; {left} did not fit and are selected", placed = placed, sheets = sheets, left = left)
-        }
-    });
+    let head = match sheets > 1 {
+        false if left == 0 => trf!("Placed {placed} in the bed", placed = placed),
+        false => trf!("Placed {placed}", placed = placed),
+        true => trf!("Placed {placed} on {sheets} sheets", placed = placed, sheets = sheets),
+    };
+    // How much of the sheet the parts cover (holes not counted); left out when nothing was placed.
+    let used = match result["used_percent"].as_f64().filter(|p| p.is_finite() && placed > 0) {
+        Some(percent) if sheets > 1 => trf!(", {percent}% of the sheets used", percent = format!("{percent:.0}")),
+        Some(percent) => trf!(", {percent}% of the sheet used", percent = format!("{percent:.0}")),
+        None => String::new(),
+    };
+    let tail = if left == 0 { String::new() } else { trf!("; {left} did not fit and are selected", left = left) };
+    app.say(format!("{head}{used}{tail}"));
 }
 
 /// Per-shape cut settings that replace the layer's.
