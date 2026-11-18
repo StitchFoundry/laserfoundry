@@ -29,6 +29,7 @@ mod recovery;
 mod register_ui;
 mod select_size_ui;
 mod settings_ui;
+mod share_prompt;
 mod shortcuts;
 pub(crate) mod snap;
 mod spacing;
@@ -499,6 +500,7 @@ impl LaserFoundryApp {
         self.platform.set_leave_warning(self.job_active() || self.session.dirty);
         self.poll_ai(ui.ctx());
         self.poll_maker(ui.ctx());
+        self.share_prompt(ui.ctx());
         if let Some(url) = self.pending_url.take() {
             ui.ctx().open_url(egui::OpenUrl::new_tab(url));
         }

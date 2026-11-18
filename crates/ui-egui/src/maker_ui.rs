@@ -27,6 +27,8 @@ pub(crate) struct MakerState {
     opening: Option<maker::OpenLink>,
     /// The name the person typed for the design they publish; until they type one, the project's name is used.
     name_edited: Option<String>,
+    /// The "Share it on MakerFoundry?" prompt.
+    pub(crate) share: crate::share_prompt::ShareState,
 }
 
 /// The longest design name (characters).
@@ -156,6 +158,10 @@ impl LaserFoundryApp {
                 }
             });
             ui.weak(tr("MakerFoundry uses your Foundry Account, the same one as the AI features."));
+        }
+        let mut offer = self.share_offer_on();
+        if ui.checkbox(&mut offer, tr("Offer to share after export")).changed() {
+            self.set_share_offer(offer);
         }
         self.note_row(ui);
     }
