@@ -164,6 +164,10 @@ pub struct LaserFoundryApp {
     ring_steps: [jog_dial::Ring; jog_dial::RING_COUNT],
     /// Show the arrow pad instead of the ring dial.
     classic_pad: bool,
+    /// Hold-to-jog: a pressed direction keeps moving until it is let go (the step is then ignored).
+    jog_hold: bool,
+    /// A held jog is under way and its cancel has not been sent yet.
+    jog_held: bool,
     offset_distance: f64,
     corner_radius: f64,
     array_columns: u32,
@@ -379,6 +383,8 @@ impl LaserFoundryApp {
             jog_step: 1.0,
             ring_steps: jog_dial::DEFAULT_RINGS,
             classic_pad: false,
+            jog_hold: false,
+            jog_held: false,
             offset_distance: 1.0,
             corner_radius: 0.0,
             array_columns: 3,

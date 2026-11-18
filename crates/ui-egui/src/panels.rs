@@ -871,6 +871,11 @@ fn jog_pad(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
                 ui.add(egui::DragValue::new(&mut app.jog_feed).range(10.0..=30_000.0).suffix(" mm/min"));
             });
         }
+        ui.checkbox(&mut app.jog_hold, tr("Hold to jog"))
+            .on_hover_text(tr("Keep moving while a direction is held and stop when it is let go (speed capped at 3000 mm/min)"));
+        if !app.jog_hold {
+            crate::jog_dial::hold_jog(app, None);
+        }
         let mut here = app.move_head_mode;
         if ui.checkbox(&mut here, tr("Click the canvas to move the laser there")).changed() {
             app.move_head_mode = here;
@@ -885,11 +890,17 @@ fn jog_pad(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         let rows: [[Option<(f64, f64)>; 3]; 3] =
             [[None, Some((0.0, -1.0)), None], [Some((-1.0, 0.0)), None, Some((1.0, 0.0))], [None, Some((0.0, 1.0)), None]];
         if app.classic_pad {
+            let mut held = None;
             egui::Grid::new("jog_grid").spacing([2.0, 2.0]).show(ui, |ui| {
                 for cells in rows {
                     for cell in cells {
                         if let Some((wx, wy)) = cell {
-                            if arrow_button(ui, wx, wy).clicked() {
+                            let resp = arrow_button(ui, wx, wy);
+                            if app.jog_hold {
+                                if resp.is_pointer_button_down_on() {
+                                    held = Some(((wx, wy), app.jog_feed));
+                                }
+                            } else if resp.clicked() {
                                 jog(app, wx, wy);
                             }
                         } else {
@@ -899,6 +910,9 @@ fn jog_pad(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
                     ui.end_row();
                 }
             });
+            if app.jog_hold {
+                crate::jog_dial::hold_jog(app, held);
+            }
         } else {
             crate::jog_dial::show(app, ui);
         }

@@ -13,6 +13,9 @@ pub(crate) const RING_COUNT: usize = 4;
 /// Fraction of the dial's radius, from the centre, that is the centre button.
 const DEAD_ZONE: f32 = 0.2;
 const DIAL_SIZE: f32 = 168.0;
+/// Fastest a held jog goes (mm/min), whatever the pad's speed says, and the longest it can be (mm; the link's own limit).
+const HOLD_FEED_MAX: f64 = 3000.0;
+const HOLD_MAX_MM: f64 = 1000.0;
 /// Eight directions in workspace terms (y grows downward, as on screen), clockwise from the right.
 const DIRECTIONS: [(f64, f64); 8] = [(1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (-1.0, 1.0), (-1.0, 0.0), (-1.0, -1.0), (0.0, -1.0), (1.0, -1.0)];
 
@@ -57,6 +60,32 @@ pub(crate) fn jog_delta(origin: Origin, ring: Ring, dir: (f64, f64)) -> (f64, f6
     (dx, dy, ring.feed)
 }
 
+/// The machine-axis travel and feed of a held jog along workspace direction `dir`: as far as the bed is wide (so the head
+/// runs until the cancel byte, or the bed edge, whichever comes first) at no more than [`HOLD_FEED_MAX`].
+pub(crate) fn hold_delta(origin: Origin, bed: (f64, f64), dir: (f64, f64), feed: f64) -> (f64, f64, f64) {
+    let reach = |v: f64| if v.is_finite() { v.clamp(1.0, HOLD_MAX_MM) } else { 1.0 };
+    let (dx, dy) = machine_delta(origin, dir.0 * reach(bed.0), dir.1 * reach(bed.1));
+    (dx, dy, if feed.is_finite() { feed.min(HOLD_FEED_MAX) } else { HOLD_FEED_MAX })
+}
+
+/// Hold-to-jog: the press of a direction starts one long jog; letting go (or no longer pressing anything) cancels it.
+/// `pressed` is the workspace direction and feed being held, if any.
+pub(crate) fn hold_jog(app: &mut LaserFoundryApp, pressed: Option<((f64, f64), f64)>) {
+    match (pressed, app.jog_held) {
+        (Some((dir, feed)), false) => {
+            let m = &app.session.doc.machine;
+            let (dx, dy, feed) = hold_delta(m.origin, (m.bed_width, m.bed_height), dir, feed);
+            app.jog_held = true;
+            app.link_do(|l| l.jog(dx, dy, feed));
+        }
+        (None, true) => {
+            app.jog_held = false;
+            app.link_do(Link::jog_cancel);
+        }
+        _ => {}
+    }
+}
+
 pub(crate) fn show(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(DIAL_SIZE, DIAL_SIZE), egui::Sense::click());
     let (centre, radius) = (rect.center(), DIAL_SIZE / 2.0);
@@ -73,11 +102,20 @@ pub(crate) fn show(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         None => None,
     };
     ui.label(line.unwrap_or_else(|| tr("Click a ring to jog; the centre goes to the origin")));
+    let pointer_hit = resp.interact_pointer_pos().and_then(|p| hit(p - centre, radius));
+    if app.jog_hold {
+        let pressed = match pointer_hit {
+            Some(Hit::Ring { ring, dir }) if resp.is_pointer_button_down_on() => app.ring_steps.get(ring).map(|r| (dir, r.feed)),
+            _ => None,
+        };
+        hold_jog(app, pressed);
+    }
     if resp.clicked()
-        && let Some(h) = resp.interact_pointer_pos().and_then(|p| hit(p - centre, radius))
+        && let Some(h) = pointer_hit
     {
         match h {
             Hit::Centre => app.link_do(Link::go_to_zero),
+            Hit::Ring { .. } if app.jog_hold => {}
             Hit::Ring { ring, dir } => {
                 if let Some(r) = app.ring_steps.get(ring).copied() {
                     let (dx, dy, feed) = jog_delta(app.session.doc.machine.origin, r, dir);
@@ -153,6 +191,15 @@ mod tests {
         assert_eq!(dir_at(0.0, 50.0), (0.0, 1.0));
         assert_eq!(dir_at(-50.0, 0.0), (-1.0, 0.0));
         assert_eq!(dir_at(40.0, -40.0), (1.0, -1.0));
+    }
+
+    #[test]
+    fn a_held_jog_runs_the_bed_width_and_is_capped_in_speed() {
+        assert_eq!(hold_delta(Origin::TopLeft, (300.0, 200.0), (1.0, 0.0), 6000.0), (300.0, 0.0, HOLD_FEED_MAX));
+        assert_eq!(hold_delta(Origin::BottomLeft, (300.0, 200.0), (0.0, -1.0), 600.0), (0.0, 200.0, 600.0));
+        let (dx, dy, feed) = hold_delta(Origin::TopLeft, (f64::NAN, 5000.0), (-1.0, 1.0), f64::NAN);
+        assert_eq!((dx, dy, feed), (-1.0, 1000.0, HOLD_FEED_MAX));
+        assert!(jog_line(dx, dy, feed).is_ok(), "always a line the link accepts");
     }
 
     #[test]

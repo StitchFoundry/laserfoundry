@@ -52,6 +52,9 @@ pub mod realtime {
     pub const FEED_HOLD: u8 = b'!';
     pub const CYCLE_START: u8 = b'~';
     pub const SOFT_RESET: u8 = 0x18;
+    /// GRBL 1.1: stops a jog in progress and discards the queued jogs; anything else running is untouched.
+    /// <https://github.com/gnea/grbl/wiki/Grbl-v1.1-Jogging>
+    pub const JOG_CANCEL: u8 = 0x85;
 }
 
 pub trait Transport {

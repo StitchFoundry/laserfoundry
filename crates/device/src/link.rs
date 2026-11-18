@@ -208,6 +208,12 @@ impl Link {
         }
     }
 
+    /// Stops a jog in progress (GRBL: the jog-cancel byte, which leaves the work offsets alone; Marlin: quick stop and laser off).
+    /// Does nothing while a job runs: [`Link::stop`] is how a job ends.
+    pub fn jog_cancel(&self) -> Result<(), LinkError> {
+        self.send(Cmd::JogCancel)
+    }
+
     /// Jog to an absolute position (GRBL: machine coordinates, `$J=G90 G21 G53 ...`; Marlin has no `G53` by default, so the
     /// position is in the work coordinates in force, with the laser off). Coordinates and feed are bounded.
     pub fn jog_to(&self, x: f64, y: f64, feed: f64) -> Result<(), LinkError> {
@@ -342,6 +348,7 @@ enum Cmd {
     Pause,
     Resume,
     Stop,
+    JogCancel,
     Close,
 }
 
@@ -557,6 +564,12 @@ impl Worker {
                 self.update(|s| s.job = JobState::Running);
             }
             Cmd::Pause | Cmd::Resume => {}
+            Cmd::JogCancel if self.job.is_none() => match self.protocol {
+                // The controller still answers the cancelled jog line, so `pending` stays as it is.
+                Protocol::Grbl => self.transport.write_all(&[realtime::JOG_CANCEL])?,
+                Protocol::Marlin => self.stop_machine()?,
+            },
+            Cmd::JogCancel => {}
             Cmd::Stop => {
                 self.pending.clear();
                 self.stop_machine()?;
@@ -1286,6 +1299,26 @@ mod tests {
             link.start_job("G21\n".into()).unwrap();
             settle(&link);
             assert_eq!(sent(&wire).last().map(String::as_str), Some("G21"));
+        }
+
+        #[test]
+        fn jog_cancel_sends_the_cancel_byte_and_never_touches_a_running_job() {
+            let (link, wire) = scripted();
+            link.jog(100.0, 0.0, 1000.0).unwrap();
+            link.jog_cancel().unwrap();
+            settle(&link);
+            let written = wire.lock().unwrap().written.clone();
+            assert!(written.contains(&realtime::JOG_CANCEL), "the cancel byte goes out");
+            assert!(!written.contains(&realtime::SOFT_RESET), "a jog cancel is not a reset");
+            reply(&wire, "ok");
+            settle(&link);
+            link.start_job("G21\n".into()).unwrap();
+            settle(&link);
+            let before = wire.lock().unwrap().written.iter().filter(|&&b| b == realtime::JOG_CANCEL).count();
+            link.jog_cancel().unwrap();
+            settle(&link);
+            let after = wire.lock().unwrap().written.iter().filter(|&&b| b == realtime::JOG_CANCEL).count();
+            assert_eq!(before, after, "no cancel byte during a job");
         }
 
         #[test]
