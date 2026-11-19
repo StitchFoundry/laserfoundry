@@ -115,7 +115,7 @@ mod choice_tests {
     fn drawing_the_open_prompt_does_not_close_it() {
         let (mut app, _) = app(true, HashMap::new());
         app.offer_share();
-        egui::Context::default().run(egui::RawInput::default(), |ctx| app.share_prompt(ctx));
+        egui::Context::default().run_ui(egui::RawInput::default(), |ui| app.share_prompt(ui.ctx())).drop_without_applying_deltas();
         assert!(app.maker.share.open, "it waits for a choice and blocks nothing");
     }
 }

@@ -68,9 +68,11 @@ impl LaserFoundryApp {
             return;
         }
         let mut choice = None;
-        egui::Window::new(tr("Share it on MakerFoundry?")).collapsible(false).resizable(false).anchor(egui::Align2::RIGHT_BOTTOM, [-12.0, -36.0]).show(
-            ctx,
-            |ui| {
+        egui::Window::new(tr("Share it on MakerFoundry?"))
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::RIGHT_BOTTOM, [-12.0, -36.0])
+            .show(ctx, |ui| {
                 ui.label(tr("Your design is saved. Want to share it? You set the details, price and licence on MakerFoundry."));
                 ui.checkbox(&mut self.maker.share.mine, tr("I made this / I own the rights"));
                 ui.checkbox(&mut self.maker.share.dont_ask, tr("Don't ask again"));
@@ -86,8 +88,7 @@ impl LaserFoundryApp {
                         choice = Some(false);
                     }
                 });
-            },
-        );
+            });
         if let Some(go) = choice {
             self.finish_share(go);
         }
