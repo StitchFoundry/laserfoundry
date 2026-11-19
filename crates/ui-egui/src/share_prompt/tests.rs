@@ -68,6 +68,22 @@ mod offer_tests {
         }
         assert_eq!(app.maker.share.asked.len(), MAX_ASKED);
     }
+
+    #[test]
+    fn long_paths_are_still_remembered_after_a_restart() {
+        let (mut first, store) = app(true, HashMap::new());
+        let long = |i: usize| PathBuf::from(format!("/home/someone/Documents/Laser projects/2026/coasters/design-{i:03}.laserfoundry"));
+        for i in 0..100 {
+            first.session.path = Some(long(i));
+            first.offer_share();
+            first.finish_share(false);
+        }
+        let kept = store.borrow().clone();
+        let (mut second, _) = app(true, kept);
+        second.session.path = Some(long(99));
+        second.offer_share();
+        assert!(!second.maker.share.open, "the newest project is remembered even when the list outgrows the host's limit");
+    }
 }
 
 mod choice_tests {
@@ -153,6 +169,10 @@ impl Platform for Fake {
     }
 
     fn storage_set(&self, key: &str, value: &str) {
+        // Like the desktop host, which refuses a setting over 4 KiB.
+        if key.len() + value.len() > 4096 {
+            return;
+        }
         self.store.borrow_mut().insert(key.to_string(), value.to_string());
     }
 }
