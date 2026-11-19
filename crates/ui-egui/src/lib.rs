@@ -1131,10 +1131,6 @@ impl LaserFoundryApp {
         }
     }
 
-    pub(crate) fn platform_font_library_available(&self) -> bool {
-        self.platform.font_library_available()
-    }
-
     pub(crate) fn platform_library_fonts(&self) -> Vec<(String, String)> {
         self.platform.library_fonts()
     }

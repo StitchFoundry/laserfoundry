@@ -229,7 +229,7 @@ pub(crate) fn picker(app: &mut LaserFoundryApp, ui: &mut egui::Ui, id_salt: &str
                     ui.label(egui::RichText::new(&entry.name).strong().small());
                     draw_sample(ui, app.font_manager.picker_cache.get(&(entry.value.clone(), sample)), PICKER_SAMPLE_SIZE);
                 });
-                let click = ui.interact(row.response.rect, ui.id().with(("font_row", &entry.value)), egui::Sense::click());
+                let click = ui.interact(row.response.rect, egui::Id::unique(("font_row", &entry.value)), egui::Sense::click());
                 if entry.value == current {
                     ui.painter().rect_stroke(row.response.rect, 2.0, ui.visuals().selection.stroke, egui::StrokeKind::Outside);
                 }
