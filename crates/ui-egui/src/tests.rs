@@ -1581,6 +1581,20 @@ mod shortcut_tests {
     }
 
     #[test]
+    fn the_fit_test_window_stays_open_and_its_card_runs_the_command() {
+        let mut h = Harness::new();
+        h.app.fit_test_open = true;
+        h.frame(vec![]);
+        assert!(h.app.fit_test_open, "the window stays open across frames");
+        h.app.fit_card.count = 5;
+        let params = h.app.fit_card.params(h.app.active_layer);
+        assert_eq!(params["count"], 5);
+        assert_eq!(params["thickness"], 3.0);
+        let result = h.app.run("generate.fit_test", params).unwrap();
+        assert_eq!(result["slots"].as_array().map(Vec::len), Some(5));
+    }
+
+    #[test]
     fn the_font_manager_draws_samples_and_knows_the_selected_texts_font() {
         let mut h = Harness::new();
         assert_eq!(crate::font_ui::selected_text_font(&h.app), None, "nothing selected");
@@ -2009,14 +2023,14 @@ mod timeline_ui_tests {
         h.app.run("edit.select_all", Value::Null);
         h.app.nest_turn = false;
         crate::panels::nest_selection(&mut h.app);
-        assert_eq!(h.app.status, Some(("Placed 3 in the bed".into(), false)));
+        assert_eq!(h.app.status, Some(("Placed 3 in the bed, 28% of the sheet used".into(), false)));
         assert!(h.app.session.doc.shapes.iter().all(|s| s.world_bounds().is_some_and(|b| b.x1 <= 60.0 + 1e-6 && b.y1 <= 40.0 + 1e-6)));
 
         // A 50 x 50 part cannot fit a 60 x 40 bed: it is reported and stays selected.
         h.app.run("shape.rectangle", json!({"x": 300, "y": 300, "width": 50, "height": 50}));
         h.app.run("edit.select_all", Value::Null);
         crate::panels::nest_selection(&mut h.app);
-        assert_eq!(h.app.status, Some(("Placed 3; 1 did not fit and are selected".into(), false)), "{:?}", h.app.status);
+        assert_eq!(h.app.status, Some(("Placed 3, 28% of the sheet used; 1 did not fit and are selected".into(), false)), "{:?}", h.app.status);
         assert_eq!(h.app.session.selection.len(), 1);
     }
 
@@ -2054,12 +2068,12 @@ mod timeline_ui_tests {
         assert!(!h.app.nest_holes, "holes are off by default");
         crate::panels::nest_selection(&mut h.app);
         // The plate and its hole are one part, so one part is placed and the small square is left.
-        assert_eq!(h.app.status, Some(("Placed 1; 1 did not fit and are selected".into(), false)), "{:?}", h.app.status);
+        assert_eq!(h.app.status, Some(("Placed 1, 49% of the sheet used; 1 did not fit and are selected".into(), false)), "{:?}", h.app.status);
         // Only what did not fit stayed selected; select everything again for the second try.
         h.app.run("edit.select_all", Value::Null);
         h.app.nest_holes = true;
         crate::panels::nest_selection(&mut h.app);
-        assert_eq!(h.app.status, Some(("Placed 2 in the bed".into(), false)), "{:?}", h.app.status);
+        assert_eq!(h.app.status, Some(("Placed 2 in the bed, 59% of the sheet used".into(), false)), "{:?}", h.app.status);
     }
 
     #[test]
@@ -2073,15 +2087,20 @@ mod timeline_ui_tests {
         h.app.nest_turn = false;
         assert_eq!(h.app.nest_sheets, 1, "one sheet by default");
         crate::panels::nest_selection(&mut h.app);
-        assert_eq!(h.app.status, Some(("Placed 2; 3 did not fit and are selected".into(), false)), "{:?}", h.app.status);
+        assert_eq!(h.app.status, Some(("Placed 2, 64% of the sheet used; 3 did not fit and are selected".into(), false)), "{:?}", h.app.status);
         h.app.run("edit.select_all", Value::Null);
         h.app.nest_sheets = 2;
         crate::panels::nest_selection(&mut h.app);
-        assert_eq!(h.app.status, Some(("Placed 4 on 2 sheets; 1 did not fit and are selected".into(), false)), "{:?}", h.app.status);
+        assert_eq!(
+            h.app.status,
+            Some(("Placed 4 on 2 sheets, 64% of the sheets used; 1 did not fit and are selected".into(), false)),
+            "{:?}",
+            h.app.status
+        );
         h.app.run("edit.select_all", Value::Null);
         h.app.nest_sheets = 3;
         crate::panels::nest_selection(&mut h.app);
-        assert_eq!(h.app.status, Some(("Placed 5 on 3 sheets".into(), false)), "{:?}", h.app.status);
+        assert_eq!(h.app.status, Some(("Placed 5 on 3 sheets, 54% of the sheets used".into(), false)), "{:?}", h.app.status);
     }
 
     #[test]

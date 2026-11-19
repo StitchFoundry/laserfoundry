@@ -38,7 +38,7 @@ pub(super) const COMMANDS: &[CommandSpec] = &[
         label: "Nest",
         menu: "Arrange",
         shortcut: None,
-        params_doc: "{ids?, x?, y?, width?, height? (the region in mm; default the whole bed), gap? (mm between parts, default 2), margin? (mm kept free at the region's edge, default 0), rotations? (evenly spaced turns tried for each part, 1 keeps their angles, default 4), resolution? (cell size in mm; default chosen from the region)}  — packs the selection into the region without overlaps, a group moving as one part; parts that do not fit stay where they were, are listed in `unplaced` and become the selection; avoid_others? (default true: keep the gap from every shape that is not being nested, except those on layers whose output is off, such as a backdrop photo; false ignores them; `avoided` says how many were kept clear of), sheets? (1 to 20, default 1: parts that do not fit the region go on further sheets, copies of it laid out to the right, sheet_gap? mm apart (default 20); `per_sheet` says how many went on each), use_holes? (default false: let parts go inside the holes of others, a closed outline wholly inside another closed outline of the same shape or group being taken as a hole; wrong for outlines that are engraved solid)",
+        params_doc: "{ids?, x?, y?, width?, height? (the region in mm; default the whole bed), gap? (mm between parts, default 2), margin? (mm kept free at the region's edge, default 0), rotations? (evenly spaced turns tried for each part, 1 keeps their angles, default 4), resolution? (cell size in mm; default chosen from the region)}  — packs the selection into the region without overlaps, a group moving as one part; parts that do not fit stay where they were, are listed in `unplaced` and become the selection; avoid_others? (default true: keep the gap from every shape that is not being nested, except those on layers whose output is off, such as a backdrop photo; false ignores them; `avoided` says how many were kept clear of), sheets? (1 to 20, default 1: parts that do not fit the region go on further sheets, copies of it laid out to the right, sheet_gap? mm apart (default 20); `per_sheet` says how many went on each; `sheet_use` lists, per sheet, `placed`, `used_area_mm2`, `region_area_mm2` and `used_percent`, and the result carries the same three totals over the sheets that were used: the area is that of the placed parts' closed outlines, a hole (a closed outline inside an odd number of others of the same shape or group) not counted, and the region area is the whole region, margin included, nothing placed gives 0), use_holes? (default false: let parts go inside the holes of others, a closed outline wholly inside another closed outline of the same shape or group being taken as a hole; wrong for outlines that are engraved solid)",
         mutates: true,
         run: nest,
     },
@@ -234,6 +234,10 @@ fn nest(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     // before it could not fit. Every sheet keeps clear of the same obstacles. Stops at the first sheet that places nothing.
     let mut remaining: Vec<usize> = (0..parts.len()).collect();
     let mut placements = Vec::new();
+    let areas: Vec<f64> = parts.iter().map(laserfoundry_nest::part_area).collect();
+    let region_area = if (width * height).is_finite() { (width * height).max(0.0) } else { 0.0 };
+    let mut sheet_use: Vec<Value> = Vec::new();
+    let mut used_total = 0.0;
     let (mut per_sheet, mut cell, mut stopped_early) = (Vec::new(), 0.0, false);
     for sheet in 0..p.sheets {
         if remaining.is_empty() {
@@ -248,10 +252,16 @@ fn nest(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
             break;
         }
         per_sheet.push(result.placed.len());
+        let mut used = 0.0;
         for mut placement in result.placed {
             placement.part = remaining.get(placement.part).copied().unwrap_or(usize::MAX);
+            used += areas.get(placement.part).copied().unwrap_or(0.0);
             placements.push(placement);
         }
+        used_total += used;
+        sheet_use.push(
+            json!({ "placed": per_sheet.last(), "used_area_mm2": used, "region_area_mm2": region_area, "used_percent": percent(used, region_area) }),
+        );
         remaining = result.unplaced.iter().filter_map(|i| remaining.get(*i).copied()).collect();
     }
 
@@ -265,6 +275,7 @@ fn nest(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
             }
         }
     }
+    let region_all = region_area * sheet_use.len() as f64;
     let unplaced_ids: Vec<ShapeId> = remaining.iter().filter_map(|i| units.get(*i)).flatten().copied().collect();
     s.selection = if unplaced_ids.is_empty() { placed_ids.clone() } else { unplaced_ids.clone() };
     Ok(json!({
@@ -275,7 +286,16 @@ fn nest(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
         "stopped_early": stopped_early,
         "avoided": avoided,
         "per_sheet": per_sheet,
+        "sheet_use": sheet_use,
+        "used_area_mm2": used_total,
+        "region_area_mm2": region_all,
+        "used_percent": percent(used_total, region_all),
     }))
+}
+
+/// `used` as a percentage of `region`, 0 when there is no region.
+fn percent(used: f64, region: f64) -> f64 {
+    if region > 0.0 { used / region * 100.0 } else { 0.0 }
 }
 
 fn check_count(n: u64) -> Result<(), EngineError> {

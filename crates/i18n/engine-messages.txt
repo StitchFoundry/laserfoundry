@@ -150,6 +150,7 @@ size limits cannot be negative
 size_mm must be between {1} and {2}
 sizes must be positive, finite and the shape must have extent in that direction
 spacing must be a finite number between 0 and 10
+spacing must be between 0 and 1000 mm
 start must be two finite numbers
 sub is not a sub-layer of this layer
 text height must be between {MIN_HEIGHT_MM} and {MAX_HEIGHT_MM} mm
