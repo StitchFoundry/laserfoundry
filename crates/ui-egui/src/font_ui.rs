@@ -23,6 +23,8 @@ const PREVIEWS_PER_FRAME: usize = 2;
 const PICKER_ROW_HEIGHT: f32 = 50.0;
 /// Size of the sample in a picker row, in points.
 const PICKER_SAMPLE_SIZE: egui::Vec2 = egui::vec2(240.0, 28.0);
+/// Height of the live preview of the typed text.
+const LIVE_PREVIEW_HEIGHT: f32 = 44.0;
 /// Longest text used as a picker sample, in characters.
 const PICKER_SAMPLE_CHARS: usize = 20;
 /// Most samples the picker keeps; the cache is emptied when it fills.
@@ -244,6 +246,26 @@ pub(crate) fn picker(app: &mut LaserFoundryApp, ui: &mut egui::Ui, id_salt: &str
         ui.ctx().request_repaint();
     }
     chosen
+}
+
+/// A live preview of the person's typed text (first line, up to the command's limit) in the font `current`,
+/// drawn full width above the picker. Laid out once per (font, text) and then served from the shared cache.
+pub(crate) fn live_preview(app: &mut LaserFoundryApp, ui: &mut egui::Ui, current: &str, text: &str) {
+    let line = live_text(text);
+    if line.is_empty() {
+        return;
+    }
+    let mut budget = 1;
+    if ensure_sample(app, current, &line, &mut budget) {
+        ui.ctx().request_repaint();
+    }
+    let width = ui.available_width().clamp(120.0, 480.0);
+    draw_sample(ui, app.font_manager.picker_cache.get(&(current.to_string(), line)), egui::vec2(width, LIVE_PREVIEW_HEIGHT));
+}
+
+/// The text of the live preview: the first line, trimmed, capped at the command's limit.
+pub(crate) fn live_text(text: &str) -> String {
+    text.lines().next().unwrap_or("").trim().chars().take(MAX_SAMPLE_CHARS).collect()
 }
 
 /// The picker's sample: the first line of `text` trimmed to 20 characters, else the font's `name`.
