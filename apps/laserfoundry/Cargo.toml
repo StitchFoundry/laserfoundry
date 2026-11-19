@@ -28,7 +28,7 @@ eframe = { workspace = true, features = ["accesskit", "default_fonts", "glow", "
 egui = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
-rfd = "0.17"
+rfd = "0.18"
 env_logger = "0.11"
 
 [build-dependencies]
