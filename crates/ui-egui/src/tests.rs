@@ -1616,6 +1616,19 @@ mod shortcut_tests {
     }
 
     #[test]
+    fn picker_samples_are_laid_out_once_within_the_budget_and_then_reused() {
+        let mut h = Harness::new();
+        let mut budget = 1;
+        assert!(!crate::font_ui::ensure_sample(&mut h.app, "", "Hi", &mut budget), "laid out with budget to spare");
+        assert_eq!((budget, h.app.font_manager.picker_cache.len()), (0, 1));
+        assert!(!crate::font_ui::ensure_sample(&mut h.app, "", "Hi", &mut budget), "a cached sample needs no budget");
+        assert_eq!(h.app.font_manager.picker_cache.len(), 1, "no second layout");
+        assert!(crate::font_ui::ensure_sample(&mut h.app, "", "Other", &mut budget), "no budget left: reported pending, not laid out");
+        assert_eq!(h.app.font_manager.picker_cache.len(), 1);
+        assert!(matches!(h.app.font_manager.picker_cache.get(&(String::new(), "Hi".to_string())), Some(crate::font_ui::Preview::Ready { .. })));
+    }
+
+    #[test]
     fn capturing_a_new_chord_binds_it_and_reports_conflicts() {
         let mut h = Harness::new();
         h.app.shortcuts_open = true;

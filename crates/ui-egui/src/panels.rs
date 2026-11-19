@@ -1085,28 +1085,12 @@ fn text_properties(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
             app.run("text.edit", json!({ "id": id, "font": "" }));
             app.text_buffer = None;
         }
-        if app.platform_font_library_available() {
-            let mut chosen = None;
-            egui::ComboBox::from_id_salt("library_font").selected_text(tr("Library fonts")).show_ui(ui, |ui| {
-                let fonts = app.platform_library_fonts();
-                egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
-                    for (name, value) in &fonts {
-                        if ui.button(name).clicked() {
-                            chosen = Some(value.clone());
-                            ui.close();
-                        }
-                    }
-                });
-                if fonts.is_empty() {
-                    ui.weak(tr("None downloaded yet: View > Font library"));
-                }
-            });
-            if let Some(font) = chosen
-                && let Some(v) = app.run("text.edit", json!({ "id": id, "font": font }))
-            {
-                app.note_unsupported(&v);
-                app.text_buffer = None;
-            }
+        let current = style.font.clone().unwrap_or_default();
+        if let Some(font) = crate::font_ui::picker(app, ui, "font_picker", &current, &content)
+            && let Some(v) = app.run("text.edit", json!({ "id": id, "font": font }))
+        {
+            app.note_unsupported(&v);
+            app.text_buffer = None;
         }
     });
     if style.font.is_some() {

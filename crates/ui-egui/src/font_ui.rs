@@ -19,6 +19,14 @@ const ROW_HEIGHT: f32 = 46.0;
 const SAMPLE_SIZE: egui::Vec2 = egui::vec2(280.0, 36.0);
 /// Samples laid out in one frame at most (large fonts take a moment); the rest wait for the next frame.
 const PREVIEWS_PER_FRAME: usize = 2;
+/// Height of one row of the picker's drop-down, in points.
+const PICKER_ROW_HEIGHT: f32 = 50.0;
+/// Size of the sample in a picker row, in points.
+const PICKER_SAMPLE_SIZE: egui::Vec2 = egui::vec2(240.0, 28.0);
+/// Longest text used as a picker sample, in characters.
+const PICKER_SAMPLE_CHARS: usize = 20;
+/// Most samples the picker keeps; the cache is emptied when it fills.
+const MAX_PICKER_CACHE: usize = 2000;
 /// The sample text shown when the person has typed none.
 const DEFAULT_SAMPLE: &str = "Aa Bb Cc 123";
 /// Longest sample the box accepts, matching the command's limit.
@@ -34,6 +42,8 @@ pub struct FontManager {
     pub folder_fonts: Vec<(String, String)>,
     /// Drawn samples by font value; cleared when the sample text changes.
     pub(crate) cache: HashMap<String, Preview>,
+    /// Drawn samples of the shared picker by (font value, sample text); kept while the window is shut.
+    pub(crate) picker_cache: HashMap<(String, String), Preview>,
 }
 
 /// A laid-out sample or the reason there is none.
@@ -117,7 +127,7 @@ pub(crate) fn window(app: &mut LaserFoundryApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(&entry.name).strong());
                         ui.weak(tr(entry.source));
                     });
-                    draw_sample(ui, app.font_manager.cache.get(&entry.value));
+                    draw_sample(ui, app.font_manager.cache.get(&entry.value), SAMPLE_SIZE);
                     let is_current = current.as_ref() == Some(&entry.value);
                     let can_apply = current.is_some() && !is_current;
                     let label = if is_current { tr("In use") } else { tr("Use") };
@@ -200,6 +210,66 @@ pub(crate) fn selected_text_font(app: &LaserFoundryApp) -> Option<String> {
     }
 }
 
+/// The shared font picker: a drop-down listing every font (built in, library, chosen folder), each row with
+/// its name and a sample drawn in that font. `text` is the user's text; its first line, trimmed to about 20
+/// characters, is the sample, else the font's name. Samples are laid out lazily and cached. Returns the
+/// `font` value the person chose this frame, if any.
+pub(crate) fn picker(app: &mut LaserFoundryApp, ui: &mut egui::Ui, id_salt: &str, current: &str, text: &str) -> Option<String> {
+    let entries = entries(app);
+    let selected = entries.iter().find(|e| e.value == current).map_or_else(|| tr("Font"), |e| e.name.clone());
+    let mut chosen = None;
+    let mut pending = false;
+    egui::ComboBox::from_id_salt(id_salt).selected_text(selected).width(PICKER_SAMPLE_SIZE.x + 20.0).show_ui(ui, |ui| {
+        let mut budget = PREVIEWS_PER_FRAME;
+        egui::ScrollArea::vertical().max_height(360.0).show_rows(ui, PICKER_ROW_HEIGHT, entries.len(), |ui, range| {
+            for entry in entries.get(range).unwrap_or(&[]) {
+                let sample = sample_text(text, &entry.name);
+                pending |= ensure_sample(app, &entry.value, &sample, &mut budget);
+                let row = ui.vertical(|ui| {
+                    ui.label(egui::RichText::new(&entry.name).strong().small());
+                    draw_sample(ui, app.font_manager.picker_cache.get(&(entry.value.clone(), sample)), PICKER_SAMPLE_SIZE);
+                });
+                let click = ui.interact(row.response.rect, egui::Id::unique(("font_row", &entry.value)), egui::Sense::click());
+                if entry.value == current {
+                    ui.painter().rect_stroke(row.response.rect, 2.0, ui.visuals().selection.stroke, egui::StrokeKind::Outside);
+                }
+                if click.clicked() {
+                    chosen = Some(entry.value.clone());
+                    ui.close();
+                }
+            }
+        });
+    });
+    if pending {
+        ui.ctx().request_repaint();
+    }
+    chosen
+}
+
+/// The picker's sample: the first line of `text` trimmed to 20 characters, else the font's `name`.
+pub(crate) fn sample_text(text: &str, name: &str) -> String {
+    let line: String = text.lines().next().unwrap_or("").trim().chars().take(PICKER_SAMPLE_CHARS).collect();
+    if line.is_empty() { name.to_string() } else { line }
+}
+
+/// Lays the sample out unless it is cached; at most one per `budget` unit. True when it is still missing.
+pub(crate) fn ensure_sample(app: &mut LaserFoundryApp, font: &str, sample: &str, budget: &mut usize) -> bool {
+    let key = (font.to_string(), sample.to_string());
+    if app.font_manager.picker_cache.contains_key(&key) {
+        return false;
+    }
+    if *budget == 0 {
+        return true;
+    }
+    *budget -= 1;
+    if app.font_manager.picker_cache.len() >= MAX_PICKER_CACHE {
+        app.font_manager.picker_cache.clear();
+    }
+    let preview = lay_out(app, font, sample);
+    app.font_manager.picker_cache.insert(key, preview);
+    false
+}
+
 fn lay_out(app: &mut LaserFoundryApp, font: &str, sample: &str) -> Preview {
     match app.session.execute("text.preview", &json!({ "font": font, "text": sample })) {
         Ok(v) => parse_preview(&v).unwrap_or_else(|| Preview::Failed(tr("unreadable preview"))),
@@ -208,8 +278,8 @@ fn lay_out(app: &mut LaserFoundryApp, font: &str, sample: &str) -> Preview {
 }
 
 /// Draws a sample as outlines, scaled to fit the box and centred vertically; a failure is shown as text.
-fn draw_sample(ui: &mut egui::Ui, preview: Option<&Preview>) {
-    let (rect, _) = ui.allocate_exact_size(SAMPLE_SIZE, egui::Sense::hover());
+fn draw_sample(ui: &mut egui::Ui, preview: Option<&Preview>, size: egui::Vec2) {
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
     let colour = ui.visuals().text_color();
     match preview {
         None => {
@@ -264,6 +334,15 @@ mod tests {
         // Non-numeric points are skipped rather than drawn.
         let v = json!({"width": 1, "height": 1, "paths": [{"closed": false, "points": [[0, 0], ["a", 1], [2]]}]});
         assert_eq!(parse_preview(&v), Some(Preview::Ready { paths: vec![(false, vec![[0.0, 0.0]])], width: 1.0, height: 1.0 }));
+    }
+
+    #[test]
+    fn the_picker_sample_is_the_first_line_trimmed_else_the_font_name() {
+        assert_eq!(sample_text("  Hello  ", "Font A"), "Hello");
+        assert_eq!(sample_text("First\nSecond", "Font A"), "First");
+        assert_eq!(sample_text("abcdefghijklmnopqrstuvwxyz", "Font A"), "abcdefghijklmnopqrst");
+        assert_eq!(sample_text("", "Font A"), "Font A");
+        assert_eq!(sample_text(" \n x", "Font A"), "Font A", "a blank first line falls back to the name");
     }
 
     #[test]
