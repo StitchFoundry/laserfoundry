@@ -1629,6 +1629,13 @@ mod shortcut_tests {
     }
 
     #[test]
+    fn the_live_preview_text_is_the_first_line_capped_and_empty_text_has_none() {
+        assert_eq!(crate::font_ui::live_text("  Hello world \nsecond"), "Hello world");
+        assert_eq!(crate::font_ui::live_text(""), "");
+        assert_eq!(crate::font_ui::live_text(&"x".repeat(500)).chars().count(), 100);
+    }
+
+    #[test]
     fn capturing_a_new_chord_binds_it_and_reports_conflicts() {
         let mut h = Harness::new();
         h.app.shortcuts_open = true;

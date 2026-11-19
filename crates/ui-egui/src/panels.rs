@@ -1086,6 +1086,7 @@ fn text_properties(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
             app.text_buffer = None;
         }
         let current = style.font.clone().unwrap_or_default();
+        crate::font_ui::live_preview(app, ui, &current, &content);
         if let Some(font) = crate::font_ui::picker(app, ui, "font_picker", &current, &content)
             && let Some(v) = app.run("text.edit", json!({ "id": id, "font": font }))
         {
