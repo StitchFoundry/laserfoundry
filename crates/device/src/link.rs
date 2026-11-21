@@ -240,9 +240,16 @@ impl Link {
         }
     }
 
-    /// `G92 X0 Y0`: make the head's current position the work origin.
+    /// Make the head's current position the work origin. GRBL: `G10 L20 P1 X0 Y0`, the `G54` work coordinates that
+    /// "can be changed via the `G10 L2 Px` or `G10 L20 Px` command"; a reset "clears `G92`'s by G-code standard, which some
+    /// users still incorrectly use to set their part zero" (<https://github.com/gnea/grbl/wiki/Grbl-v1.1-Commands>, `$#`;
+    /// <https://github.com/gnea/grbl/wiki/Grbl-v1.1-Interface>). It writes the EEPROM, so it goes as one line and never
+    /// inside a job ([`Self::send_line`] refuses while one runs). Marlin: `G92 X0 Y0`.
     pub fn set_zero(&self) -> Result<(), LinkError> {
-        self.send_line("G92 X0 Y0")
+        match self.protocol {
+            Protocol::Grbl => self.send_line("G10 L20 P1 X0 Y0"),
+            Protocol::Marlin => self.send_line("G92 X0 Y0"),
+        }
     }
 
     /// Rapid move back to the work origin (Marlin runs one command per line, so `G90` and the move go separately).
@@ -1332,6 +1339,15 @@ mod tests {
             settle(&link);
             assert_eq!(link.snapshot().job, JobState::Running);
             assert_eq!(sent(&wire).last().map(String::as_str), Some("G21"));
+        }
+
+        #[test]
+        fn set_zero_on_grbl_sets_the_g54_work_origin_not_g92() {
+            let (link, wire) = scripted();
+            link.set_zero().unwrap();
+            settle(&link);
+            assert_eq!(sent(&wire).last().map(String::as_str), Some("G10 L20 P1 X0 Y0"));
+            assert!(!sent(&wire).iter().any(|l| l.contains("G92")), "{:?}", sent(&wire));
         }
 
         fn scripted() -> (Link, Arc<Mutex<Wire>>) {

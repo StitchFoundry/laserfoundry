@@ -160,7 +160,7 @@ fn body(app: &mut LaserFoundryApp, st: &mut Saved, ui: &mut egui::Ui) {
         if alarm && big(ui, true, tr("Unlock")).on_hover_text(tr("Clear an alarm ($X)")).clicked() {
             app.link_do(Link::unlock);
         }
-        if big(ui, true, tr("Set origin here")).on_hover_text(tr("Make the head's position the work origin (G92)")).clicked() {
+        if big(ui, true, tr("Set origin here")).on_hover_text(tr("Make the head's position the work origin")).clicked() {
             app.link_do(Link::set_zero);
         }
         if big(ui, true, tr("Go to origin")).clicked() {

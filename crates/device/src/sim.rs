@@ -176,8 +176,8 @@ impl SimulatedGrbl {
                 }
             }
         }
-        if body.contains("G92") {
-            // The head's current position becomes the given work coordinate.
+        if body.contains("G92") || body.contains("G10 L20") {
+            // The head's current position becomes the given work coordinate (`G92`, or `G10 L20` for `G54`).
             self.offset = (self.position.0 - x.unwrap_or(0.0), self.position.1 - y.unwrap_or(0.0));
             return;
         }
