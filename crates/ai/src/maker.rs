@@ -112,7 +112,9 @@ pub fn open_link_in(services: super::services::Services, value: &str) -> Result<
     }
     let path_end = tail.find(['?', '#']).unwrap_or(tail.len());
     let (path, query) = tail.split_at(path_end);
-    if !path.starts_with(API_PREFIX) || path.split('/').any(|part| part == "." || part == "..") {
+    // `%2e` is a dot to a browser too (https://url.spec.whatwg.org/#double-dot-path-segment)
+    let dot_segment = |part: &str| matches!(part.to_ascii_lowercase().replace("%2e", ".").as_str(), "." | "..");
+    if !path.starts_with(API_PREFIX) || path.split('/').any(dot_segment) {
         return Err(AiError::BadLink);
     }
     // a fragment never reaches the server; it is dropped so the address fetched is what was checked
