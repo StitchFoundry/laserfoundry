@@ -432,6 +432,10 @@ mod maker_tests {
                 "https://makerfoundry.app/api/v1/../../admin/a.svg",
                 "https://makerfoundry.app/api/v1/designs/1/file/..",
                 "https://makerfoundry.app/api/v1/designs/./1/../../../x.svg",
+                // browsers read these as dot segments too (WHATWG URL standard, "double-dot path segment")
+                "https://makerfoundry.app/api/v1/designs/%2e%2e/%2E%2E/other/a.svg",
+                "https://makerfoundry.app/api/v1/designs/.%2e/../x.svg",
+                "https://makerfoundry.app/api/v1/designs/%2e./%2e/../x.svg",
                 "https://makerfoundry.app/api/v1/designs/1/file/a b.svg",
                 "https://makerfoundry.app/api/v1/designs/1/file/a\tb.svg",
                 "https://makerfoundry.app/api/v1/designs/1/file/a\nb.svg",
