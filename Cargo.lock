@@ -1470,6 +1470,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "harfrust"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0690f8c81dfeca8987d8518cf1c861d7b58d43ad0cedae9184d41af236effb9c"
+dependencies = [
+ "bitflags 2.13.2",
+ "bytemuck",
+ "read-fonts 0.47.0",
+ "smallvec",
+ "yoke",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1998,7 +2011,7 @@ dependencies = [
 name = "laserfoundry-text"
 version = "0.6.0"
 dependencies = [
- "harfrust 0.15.0",
+ "harfrust 0.16.1",
  "kurbo",
  "laserfoundry-geom",
  "roxmltree 0.21.2",

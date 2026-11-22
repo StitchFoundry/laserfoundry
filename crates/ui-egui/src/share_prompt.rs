@@ -14,6 +14,9 @@ const OFFER_KEY: &str = "laserfoundry.maker.offer_share";
 const ASKED_KEY: &str = "laserfoundry.maker.share_asked";
 /// How many projects are remembered (the oldest are forgotten first), so the stored text stays small.
 const MAX_ASKED: usize = 200;
+/// Most bytes the stored list may take, the oldest projects forgotten first: well under the 4 KiB a desktop setting may hold
+/// (a larger one is refused and the list would stop being remembered).
+const MAX_ASKED_BYTES: usize = 3584;
 /// The key of a project that has no file yet.
 const UNSAVED: &str = "(unsaved)";
 
@@ -43,6 +46,14 @@ impl LaserFoundryApp {
         share.asked.push(key);
         let extra = share.asked.len().saturating_sub(MAX_ASKED);
         share.asked.drain(..extra);
+        // The joined text: each path plus its newline.
+        let mut bytes: usize = share.asked.iter().map(|k| k.len() + 1).sum();
+        let mut drop = 0;
+        while bytes > MAX_ASKED_BYTES && drop + 1 < share.asked.len() {
+            bytes -= share.asked.get(drop).map_or(0, |k| k.len() + 1);
+            drop += 1;
+        }
+        share.asked.drain(..drop);
         share.open = true;
         share.dont_ask = false;
         share.mine = false;
