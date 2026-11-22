@@ -180,6 +180,7 @@ the font registry is unavailable
 the four points do not form a usable quadrilateral (some are repeated or in a line)
 the image file is too large
 the job is {w}×{h} mm, larger than the {bw}×{bh} mm work area
+the laser is firing; release Fire first
 the library font {path} is not loaded; download the font library first
 the machine entered an alarm state; clear it (unlock/home) before running again
 the marks imply a change of size of {0}x, which is not believable
