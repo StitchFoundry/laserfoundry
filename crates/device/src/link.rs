@@ -245,10 +245,16 @@ impl Link {
         self.send_line("G92 X0 Y0")
     }
 
-    /// Rapid move back to the work origin (Marlin runs one command per line, so `G90` and the move go separately).
-    pub fn go_to_zero(&self) -> Result<(), LinkError> {
+    /// Move back to the work origin at `feed` mm/min. GRBL: a jog, `$J=G90 G21 X0 Y0 F<feed>`, which "will move to X=10.0mm and
+    /// Y=-1.5mm in work coordinate frame (WPos)" for `$J=X10.0 Y-1.5 F100` and "does not alter the g-code parser state", where a
+    /// `G90 G0` would leave `G0` in force (<https://github.com/gnea/grbl/wiki/Grbl-v1.1-Commands>, `$J=line`). Marlin runs one
+    /// command per line, so `G90` and a rapid move go separately.
+    pub fn go_to_zero(&self, feed: f64) -> Result<(), LinkError> {
+        if !(feed.is_finite() && (1.0..=MAX_FEED).contains(&feed)) {
+            return Err(LinkError::Rejected(format!("a jog's feed must be within 1–{MAX_FEED} mm/min")));
+        }
         match self.protocol {
-            Protocol::Grbl => self.send_line("G90 G0 X0 Y0"),
+            Protocol::Grbl => self.send_line(&format!("$J=G90 G21 X0 Y0 F{}", trim_num(feed))),
             Protocol::Marlin => self.send_lines(&["M5".into(), "G90".into(), "G0 X0 Y0".into()]),
         }
     }
@@ -892,7 +898,7 @@ mod tests {
             link.set_zero().unwrap(); // work zero here
             link.jog(5.0, 5.0, 3000.0).unwrap();
             wait_for(&link, "second jog", |s| position(s) == Some((35.0, 45.0)));
-            link.go_to_zero().unwrap();
+            link.go_to_zero(3000.0).unwrap();
             wait_for(&link, "return to the work origin", |s| position(s) == Some((30.0, 40.0)));
             link.home().unwrap();
             wait_for(&link, "homing", |s| position(s) == Some((0.0, 0.0)));
@@ -1334,6 +1340,15 @@ mod tests {
             assert_eq!(sent(&wire).last().map(String::as_str), Some("G21"));
         }
 
+        #[test]
+        fn go_to_zero_on_grbl_is_a_jog_in_work_coordinates() {
+            let (link, wire) = scripted();
+            link.go_to_zero(3000.0).unwrap();
+            settle(&link);
+            assert_eq!(sent(&wire).last().map(String::as_str), Some("$J=G90 G21 X0 Y0 F3000"));
+            assert!(link.go_to_zero(0.0).is_err() && link.go_to_zero(f64::NAN).is_err());
+        }
+
         fn scripted() -> (Link, Arc<Mutex<Wire>>) {
             let wire = Arc::new(Mutex::new(Wire::default()));
             (Link::connect_inline_with(Box::new(Scripted(Arc::clone(&wire))), Protocol::Grbl), wire)
@@ -1619,7 +1634,7 @@ mod tests {
             link.home().unwrap();
             link.unlock().unwrap();
             link.set_zero().unwrap();
-            link.go_to_zero().unwrap();
+            link.go_to_zero(3000.0).unwrap();
             settle(&link);
             let lines: Vec<String> = sent(&wire)[1..].to_vec();
             assert_eq!(

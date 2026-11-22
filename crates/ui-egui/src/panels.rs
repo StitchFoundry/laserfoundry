@@ -928,7 +928,10 @@ fn jog_pad(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
                 app.link_do(Link::set_zero);
             }
             if ui.button(tr("Go to origin")).clicked() {
-                app.link_do(Link::go_to_zero);
+                {
+                    let feed = app.jog_feed;
+                    app.link_do(|l| l.go_to_zero(feed));
+                }
             }
         });
     });

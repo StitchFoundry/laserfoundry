@@ -114,7 +114,10 @@ pub(crate) fn show(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         && let Some(h) = pointer_hit
     {
         match h {
-            Hit::Centre => app.link_do(Link::go_to_zero),
+            Hit::Centre => {
+                let feed = app.jog_feed;
+                app.link_do(|l| l.go_to_zero(feed));
+            }
             Hit::Ring { .. } if app.jog_hold => {}
             Hit::Ring { ring, dir } => {
                 if let Some(r) = app.ring_steps.get(ring).copied() {
