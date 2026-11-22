@@ -13,6 +13,9 @@ pub(crate) const RING_COUNT: usize = 4;
 /// Fraction of the dial's radius, from the centre, that is the centre button.
 const DEAD_ZONE: f32 = 0.2;
 const DIAL_SIZE: f32 = 168.0;
+const KEY_PREFIX: &str = "jog_rings:";
+const STEP_RANGE: (f64, f64) = (0.01, 100.0);
+const FEED_RANGE: (f64, f64) = (10.0, 30_000.0);
 /// Fastest a held jog goes (mm/min), whatever the pad's speed says, and the longest it can be (mm; the link's own limit).
 const HOLD_FEED_MAX: f64 = 3000.0;
 const HOLD_MAX_MM: f64 = 1000.0;
@@ -29,6 +32,42 @@ pub(crate) struct Ring {
 /// Inner (slow, fine) to outer (fast, coarse).
 pub(crate) const DEFAULT_RINGS: [Ring; RING_COUNT] =
     [Ring { step: 0.1, feed: 600.0 }, Ring { step: 1.0, feed: 1500.0 }, Ring { step: 10.0, feed: 3000.0 }, Ring { step: 50.0, feed: 6000.0 }];
+
+/// One line, `step:feed` pairs separated by spaces.
+pub(crate) fn rings_to_text(rings: &[Ring; RING_COUNT]) -> String {
+    rings.iter().map(|r| format!("{}:{}", r.step, r.feed)).collect::<Vec<_>>().join(" ")
+}
+
+/// Reads saved text back; anything damaged, non-finite or out of range falls back to the default for that ring.
+pub(crate) fn rings_from_text(text: &str) -> [Ring; RING_COUNT] {
+    let mut rings = DEFAULT_RINGS;
+    for (ring, part) in rings.iter_mut().zip(text.split_whitespace()) {
+        let Some((s, f)) = part.split_once(':') else { continue };
+        if let (Ok(step), Ok(feed)) = (s.parse::<f64>(), f.parse::<f64>())
+            && (STEP_RANGE.0..=STEP_RANGE.1).contains(&step)
+            && (FEED_RANGE.0..=FEED_RANGE.1).contains(&feed)
+        {
+            *ring = Ring { step, feed };
+        }
+    }
+    rings
+}
+
+/// Loads the ring steps saved for the current machine when it changes, and saves them when they change.
+fn sync_storage(app: &mut LaserFoundryApp) {
+    let name = app.session.doc.machine.name.clone();
+    if app.rings_for.as_deref() != Some(name.as_str()) {
+        app.ring_steps = app.platform.storage_get(&format!("{KEY_PREFIX}{name}")).map(|t| rings_from_text(&t)).unwrap_or(DEFAULT_RINGS);
+        app.rings_saved = rings_to_text(&app.ring_steps);
+        app.rings_for = Some(name);
+        return;
+    }
+    let text = rings_to_text(&app.ring_steps);
+    if text != app.rings_saved {
+        app.platform.storage_set(&format!("{KEY_PREFIX}{name}"), &text);
+        app.rings_saved = text;
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Hit {
@@ -87,6 +126,7 @@ pub(crate) fn hold_jog(app: &mut LaserFoundryApp, pressed: Option<((f64, f64), f
 }
 
 pub(crate) fn show(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
+    sync_storage(app);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(DIAL_SIZE, DIAL_SIZE), egui::Sense::click());
     let (centre, radius) = (rect.center(), DIAL_SIZE / 2.0);
     let enabled = ui.is_enabled();
@@ -128,8 +168,8 @@ pub(crate) fn show(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         for (i, r) in app.ring_steps.iter_mut().enumerate() {
             ui.horizontal(|ui| {
                 ui.label(trf!("Ring {n}", n = i + 1));
-                ui.add(egui::DragValue::new(&mut r.step).range(0.01..=100.0).suffix(" mm"));
-                ui.add(egui::DragValue::new(&mut r.feed).range(10.0..=30_000.0).suffix(" mm/min"));
+                ui.add(egui::DragValue::new(&mut r.step).range(STEP_RANGE.0..=STEP_RANGE.1).suffix(" mm"));
+                ui.add(egui::DragValue::new(&mut r.feed).range(FEED_RANGE.0..=FEED_RANGE.1).suffix(" mm/min"));
             });
         }
     });
@@ -200,6 +240,19 @@ mod tests {
         let (dx, dy, feed) = hold_delta(Origin::TopLeft, (f64::NAN, 5000.0), (-1.0, 1.0), f64::NAN);
         assert_eq!((dx, dy, feed), (-1.0, 1000.0, HOLD_FEED_MAX));
         assert!(jog_line(dx, dy, feed).is_ok(), "always a line the link accepts");
+    }
+
+    #[test]
+    fn ring_settings_round_trip_and_damaged_text_falls_back() {
+        let mut rings = DEFAULT_RINGS;
+        rings[1] = Ring { step: 2.5, feed: 900.0 };
+        assert_eq!(rings_from_text(&rings_to_text(&rings)), rings);
+        assert_eq!(rings_from_text(""), DEFAULT_RINGS);
+        assert_eq!(rings_from_text("NaN:inf -1:5 1e99:1 0.5:20000 junk:junk"), {
+            let mut r = DEFAULT_RINGS;
+            r[3] = Ring { step: 0.5, feed: 20000.0 };
+            r
+        });
     }
 
     #[test]

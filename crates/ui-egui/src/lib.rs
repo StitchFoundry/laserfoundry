@@ -164,6 +164,9 @@ pub struct LaserFoundryApp {
     jog_step: f64,
     /// Step and feed of each ring of the jog dial.
     ring_steps: [jog_dial::Ring; jog_dial::RING_COUNT],
+    /// The machine the ring steps were loaded for, and the text last saved for them (see `jog_dial::sync_storage`).
+    rings_for: Option<String>,
+    rings_saved: String,
     /// Show the arrow pad instead of the ring dial.
     classic_pad: bool,
     /// Hold-to-jog: a pressed direction keeps moving until it is let go (the step is then ignored).
@@ -390,6 +393,8 @@ impl LaserFoundryApp {
             text_warning: None,
             jog_step: 1.0,
             ring_steps: jog_dial::DEFAULT_RINGS,
+            rings_for: None,
+            rings_saved: String::new(),
             classic_pad: false,
             jog_hold: false,
             jog_held: false,
