@@ -75,8 +75,8 @@ pub(crate) fn window(app: &mut LaserFoundryApp, ctx: &egui::Context) {
         }
     }
     if use_box {
-        app.box_material[0] = app.fit_card.thickness;
-        app.box_material[1] = app.fit_card.kerf();
+        app.box_card.thickness = app.fit_card.thickness;
+        app.box_card.kerf = app.fit_card.kerf();
     }
     if use_layer {
         let (id, offset) = (app.active_layer, app.fit_card.kerf() / 2.0);
