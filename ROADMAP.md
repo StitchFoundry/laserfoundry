@@ -1138,6 +1138,12 @@ See [`docs/gaps.md`](docs/gaps.md) for the ranked work list and
   them) reached the advisory database. `Cargo.lock` now pins the patched 1.1.6; no new crates. Checked: `cargo audit --deny unsound --deny
   yanked` passes (3 known unmaintained warnings remain), full gate green. `fuzz/Cargo.lock` is stale with other advisories: #94.
   Nightly sweep: no needs-triage issues, full gate green on main before the change.
+- **2026-11-23 — issue #69, staging switch (redo after PR #181 closed).** Main already holds the whole switch from the 2026-11-09 entry
+  below (`?services=staging`, compiled-in hosts, banner, allow-lists, CSP, tests), so nothing of it was rebuilt. The one small gap closed:
+  the Publish window's Name field is now labelled by its "Name" label (`labelled_by`), so an accessibility tree names it. The Send button
+  already takes its name from its text. **Not done:** the web build still has no accessibility tree (eframe 0.37 web has no `accesskit`
+  support in our lockfile), so Playwright cannot find these by name there yet; no test for the label (needs accesskit in the UI crate's
+  frame tests). Not built or run in this job; the pull request's CI is the first check.
 - **2026-11-09 — issue #69, staging switch for the web app (part 1).** `?services=staging` makes the tab use the staging account service and the
   staging MakerFoundry, both compiled in (`laserfoundry_ai::services`), shows "STAGING services (test data)" in the status bar, and is remembered
   for the tab's session only (`?services=production` clears it). Only the exact word counts; no address is ever taken from the URL. Staging keeps
