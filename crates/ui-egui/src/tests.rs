@@ -1595,6 +1595,20 @@ mod shortcut_tests {
     }
 
     #[test]
+    fn the_fit_card_kerf_is_thickness_minus_the_fitting_slot() {
+        let mut h = Harness::new();
+        h.app.fit_card.best_slot = 2.9;
+        assert!((h.app.fit_card.kerf() - 0.1).abs() < 1e-9);
+        h.app.fit_card.best_slot = 3.5;
+        assert_eq!(h.app.fit_card.kerf(), 0.0, "never negative");
+        h.app.fit_card.best_slot = f64::NAN;
+        assert_eq!(h.app.fit_card.kerf(), 0.0, "not finite");
+        h.app.fit_test_open = true;
+        h.frame(vec![]);
+        assert!(h.app.fit_test_open);
+    }
+
+    #[test]
     fn the_font_manager_draws_samples_and_knows_the_selected_texts_font() {
         let mut h = Harness::new();
         assert_eq!(crate::font_ui::selected_text_font(&h.app), None, "nothing selected");
