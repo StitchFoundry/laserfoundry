@@ -129,10 +129,11 @@ impl LaserFoundryApp {
     pub(crate) fn publish_window(&mut self, ui: &mut egui::Ui) {
         ui.label(tr("Send this drawing to MakerFoundry as a draft. You choose the title, licence and price on MakerFoundry, and nothing is public until you publish it there."));
         ui.horizontal(|ui| {
-            ui.label(tr("Name"));
+            let label = ui.label(tr("Name"));
             let mut name = self.publish_name();
             let field = egui::TextEdit::singleline(&mut name).char_limit(MAX_NAME).desired_width(280.0).hint_text(tr("Name your design"));
-            if ui.add(field).changed() {
+            // the label names the field for assistive tools (and for a test that looks the field up by its name)
+            if ui.add(field).labelled_by(label.id).changed() {
                 self.maker.name_edited = Some(name);
             }
         });
