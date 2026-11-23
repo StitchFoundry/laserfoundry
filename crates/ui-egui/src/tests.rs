@@ -1595,6 +1595,20 @@ mod shortcut_tests {
     }
 
     #[test]
+    fn the_fit_card_kerf_is_thickness_minus_the_fitting_slot() {
+        let mut h = Harness::new();
+        h.app.fit_card.best_slot = 2.9;
+        assert!((h.app.fit_card.kerf() - 0.1).abs() < 1e-9);
+        h.app.fit_card.best_slot = 3.5;
+        assert_eq!(h.app.fit_card.kerf(), 0.0, "never negative");
+        h.app.fit_card.best_slot = f64::NAN;
+        assert_eq!(h.app.fit_card.kerf(), 0.0, "not finite");
+        h.app.fit_test_open = true;
+        h.frame(vec![]);
+        assert!(h.app.fit_test_open);
+    }
+
+    #[test]
     fn the_box_maker_window_stays_open_and_its_card_runs_the_command() {
         let mut h = Harness::new();
         h.app.box_open = true;
