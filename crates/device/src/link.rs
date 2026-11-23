@@ -14,6 +14,10 @@ use crate::settings;
 use crate::stream::{JobStream, MAX_LINE_BYTES, Window};
 use crate::{DeviceError, MARLIN_STOP, MachineState, Progress, Protocol, Status, Transport, parse_marlin_position, parse_status, realtime};
 
+mod fire;
+
+pub use fire::{FIRE_DEFAULT_PERCENT, FIRE_MAX_DURATION, FIRE_MAX_PERCENT, fire_line};
+
 /// Console lines kept.
 pub const CONSOLE_LIMIT: usize = 500;
 /// How often the worker asks the controller for a status report.
@@ -52,6 +56,8 @@ pub struct Snapshot {
 pub enum LinkError {
     #[error("a job is running; stop it first")]
     Busy,
+    #[error("the laser is firing; release Fire first")]
+    Firing,
     #[error("not connected")]
     Disconnected,
     #[error("{0}")]
@@ -281,7 +287,13 @@ impl Link {
     }
 
     fn require_idle(&self) -> Result<(), LinkError> {
-        if self.is_job_active() { Err(LinkError::Busy) } else { Ok(()) }
+        if self.is_firing() {
+            Err(LinkError::Firing)
+        } else if self.is_job_active() {
+            Err(LinkError::Busy)
+        } else {
+            Ok(())
+        }
     }
 
     fn send(&self, cmd: Cmd) -> Result<(), LinkError> {
@@ -349,6 +361,8 @@ enum Cmd {
     Resume,
     Stop,
     JogCancel,
+    FireOn(String),
+    FireOff,
     Close,
 }
 
@@ -359,11 +373,24 @@ struct Shared {
     progress: Option<Progress>,
     console: VecDeque<String>,
     settings: BTreeMap<u32, String>,
+    /// Fire was asked for and not yet released or stopped (see [`Link::fire_on`]).
+    firing: bool,
+    /// Fire was cut off (time cap, alarm, error): it needs a release before it can fire again.
+    fire_latched: bool,
 }
 
 impl Default for Shared {
     fn default() -> Self {
-        Shared { connected: false, status: None, job: JobState::Idle, progress: None, console: VecDeque::new(), settings: BTreeMap::new() }
+        Shared {
+            connected: false,
+            status: None,
+            job: JobState::Idle,
+            progress: None,
+            console: VecDeque::new(),
+            settings: BTreeMap::new(),
+            firing: false,
+            fire_latched: false,
+        }
     }
 }
 
@@ -389,6 +416,9 @@ struct Worker {
     pending: VecDeque<Pending>,
     paused: bool,
     finishing: bool,
+    /// When Fire switched the laser on, while it is on.
+    fire_started: Option<Instant>,
+    fire_limit: Duration,
     last_status_request: Instant,
     last_activity: Instant,
 }
@@ -405,6 +435,8 @@ impl Worker {
             pending: VecDeque::new(),
             paused: false,
             finishing: false,
+            fire_started: None,
+            fire_limit: FIRE_MAX_DURATION,
             last_status_request: now - STATUS_INTERVAL,
             last_activity: now,
         }
@@ -438,7 +470,7 @@ impl Worker {
 
     /// Closing: stop motion and the laser if a job was in progress.
     fn finish(&mut self) {
-        if self.job.is_some() {
+        if self.job.is_some() || self.fire_started.is_some() {
             let _ = self.stop_machine();
         }
         self.update(|s| s.connected = false);
@@ -446,6 +478,8 @@ impl Worker {
 
     /// Stops motion and switches the laser off: GRBL is soft-reset, Marlin gets `M410` and `M5`.
     fn stop_machine(&mut self) -> Result<(), DeviceError> {
+        self.fire_started = None;
+        self.update(|s| s.firing = false);
         match self.protocol {
             Protocol::Grbl => {
                 self.transport.write_all(&[realtime::SOFT_RESET])?;
@@ -570,6 +604,8 @@ impl Worker {
                 Protocol::Marlin => self.stop_machine()?,
             },
             Cmd::JogCancel => {}
+            Cmd::FireOn(line) => self.fire_on(line)?,
+            Cmd::FireOff => self.fire_off("released", false)?,
             Cmd::Stop => {
                 self.pending.clear();
                 self.stop_machine()?;
@@ -588,6 +624,9 @@ impl Worker {
     }
 
     fn step(&mut self) -> Result<(), DeviceError> {
+        if self.fire_started.is_some_and(|t| t.elapsed() >= self.fire_limit) {
+            self.fire_off("time cap reached", true)?;
+        }
         if self.last_status_request.elapsed() >= STATUS_INTERVAL {
             match self.protocol {
                 Protocol::Grbl => {
@@ -638,6 +677,9 @@ impl Worker {
         }
         if let Some(status) = parse_status(line) {
             let idle = status.state == crate::MachineState::Idle;
+            if !idle {
+                self.fire_off("the machine is not idle", true)?;
+            }
             let alarm = status.state == crate::MachineState::Alarm;
             self.update(|s| s.status = Some(status));
             if alarm && self.job.is_some() {
@@ -654,6 +696,9 @@ impl Worker {
             return Ok(());
         }
         if line == "ok" || line.starts_with("error:") || line.starts_with("ALARM:") {
+            if line != "ok" {
+                self.fire_off("the controller reported a problem", true)?;
+            }
             // Answers come in the order the lines were sent, and no job line goes out while one is owed for an earlier command
             // (see `grbl_answers_owed`), so an answer goes to the job only once those are all in.
             if self.pending.is_empty()
@@ -788,7 +833,7 @@ impl Worker {
 
     fn fail_io(&mut self, e: DeviceError) {
         self.log(format!("! connection error: {e}"));
-        if self.job.is_some() {
+        if self.job.is_some() || self.fire_started.is_some() {
             // A failed write does not always mean the port is gone: try to stop the machine before giving up on it.
             let _ = self.stop_machine();
         }
