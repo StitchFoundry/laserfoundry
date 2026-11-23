@@ -15,6 +15,10 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
+pub mod project;
+
+pub use project::{Bounds, Mm, ProjectError, Projection};
+
 /// The credit every map export must carry (ODbL).
 pub const OSM_CREDIT: &str = "(c) OpenStreetMap contributors";
 
