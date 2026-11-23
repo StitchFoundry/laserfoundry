@@ -1453,21 +1453,19 @@ fn test_grid_section(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
 fn box_maker_section(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     ui.collapsing(tr("Box maker"), |ui| {
         ui.horizontal(|ui| {
-            for (v, prefix) in app.box_size.iter_mut().zip(["width ", "depth ", "height "]) {
+            for (v, prefix) in app.box_card.size.iter_mut().zip(["width ", "depth ", "height "]) {
                 ui.add(egui::DragValue::new(v).range(1.0..=2000.0).prefix(prefix));
             }
         });
         ui.horizontal(|ui| {
-            for (v, prefix) in app.box_material.iter_mut().zip(["thickness ", "kerf ", "finger "]) {
+            let card = &mut app.box_card;
+            for (v, prefix) in [&mut card.thickness, &mut card.kerf, &mut card.finger].into_iter().zip(["thickness ", "kerf ", "finger "]) {
                 ui.add(egui::DragValue::new(v).range(0.0..=100.0).speed(0.05).prefix(prefix));
             }
         });
-        ui.checkbox(&mut app.box_lid, tr("Lid"));
+        ui.checkbox(&mut app.box_card.lid, tr("Lid"));
         if ui.button(tr("Create on the active layer")).on_hover_text(tr("Inside size in mm; panels are laid out with a gap")).clicked() {
-            let params = json!({
-                "width": app.box_size[0], "depth": app.box_size[1], "height": app.box_size[2], "thickness": app.box_material[0],
-                "kerf": app.box_material[1], "finger": app.box_material[2], "lid": app.box_lid, "layer": app.active_layer,
-            });
+            let params = app.box_card.params(app.active_layer);
             app.run("generate.box", params);
         }
     });
