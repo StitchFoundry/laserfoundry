@@ -1297,6 +1297,16 @@ fn nest_section(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
         ui.checkbox(&mut app.nest_turn, tr("Allow turning")).on_hover_text(tr("Try each part at 0, 90, 180 and 270 degrees"));
     });
     ui.horizontal(|ui| {
+        let current = NEST_STOCK.get(app.nest_stock).map_or("Whole bed", |s| s.0);
+        egui::ComboBox::from_id_salt("nest_stock").selected_text(tr(current)).show_ui(ui, |ui| {
+            for (i, (name, _, _)) in NEST_STOCK.iter().enumerate() {
+                ui.selectable_value(&mut app.nest_stock, i, tr(name));
+            }
+        });
+        ui.add(egui::DragValue::new(&mut app.nest_margin).range(0.0..=100.0).speed(0.1).prefix("margin ").suffix(" mm"))
+            .on_hover_text(tr("Kept free at the sheet's edge"));
+    });
+    ui.horizontal(|ui| {
         ui.add(egui::DragValue::new(&mut app.nest_sheets).range(1..=20).prefix("sheets "))
             .on_hover_text(tr("Parts that do not fit the bed go on further sheets laid out to the right of it, 20 mm apart"));
     });
@@ -1314,9 +1324,23 @@ fn nest_section(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
     }
 }
 
-/// Nests the selection into the bed with the panel's settings and says how it went.
+/// Sheet sizes the nesting can use instead of the whole bed: name, width and height in mm (the first entry, 0 x 0, is the bed).
+const NEST_STOCK: [(&str, f64, f64); 6] = [
+    ("Whole bed", 0.0, 0.0),
+    ("300 x 200 mm", 300.0, 200.0),
+    ("600 x 300 mm", 600.0, 300.0),
+    ("600 x 400 mm", 600.0, 400.0),
+    ("8 x 12 in", 203.2, 304.8),
+    ("12 x 24 in", 304.8, 609.6),
+];
+
+/// Nests the selection into the bed (or the chosen sheet size, anchored at the bed origin) with the panel's settings and says how it went.
 pub(crate) fn nest_selection(app: &mut LaserFoundryApp) {
-    let params = json!({ "gap": app.nest_gap, "rotations": if app.nest_turn { 4 } else { 1 }, "avoid_others": app.nest_avoid, "use_holes": app.nest_holes, "sheets": app.nest_sheets });
+    let mut params = json!({ "gap": app.nest_gap, "margin": app.nest_margin, "rotations": if app.nest_turn { 4 } else { 1 }, "avoid_others": app.nest_avoid, "use_holes": app.nest_holes, "sheets": app.nest_sheets });
+    if let (Some((_, w, h)), Some(map)) = (NEST_STOCK.get(app.nest_stock).filter(|s| s.1 > 0.0), params.as_object_mut()) {
+        map.insert("width".into(), json!(w));
+        map.insert("height".into(), json!(h));
+    }
     let Some(result) = app.run("arrange.nest", params) else { return };
     let placed = result["placed"].as_u64().unwrap_or(0);
     let left = result["unplaced"].as_array().map_or(0, Vec::len);

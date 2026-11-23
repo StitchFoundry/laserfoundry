@@ -17,7 +17,10 @@ mod stream;
 pub mod serial;
 
 pub use codes::{alarm_hint, alarm_text, error_hint, error_text};
-pub use link::{CONSOLE_LIMIT, JobState, Link, LinkError, MAX_FEED, MAX_JOG_MM, MAX_TRAVEL_MM, Snapshot, jog_line, jog_to_line};
+pub use link::{
+    CONSOLE_LIMIT, FIRE_DEFAULT_PERCENT, FIRE_MAX_DURATION, FIRE_MAX_PERCENT, JobState, Link, LinkError, MAX_FEED, MAX_JOG_MM, MAX_TRAVEL_MM,
+    Snapshot, fire_line, jog_line, jog_to_line,
+};
 pub use sim::SimulatedGrbl;
 pub use sim_marlin::SimulatedMarlin;
 pub use status::{MachineState, Status, parse_marlin_position, parse_status};
