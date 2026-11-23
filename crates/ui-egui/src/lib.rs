@@ -14,6 +14,7 @@ pub(crate) mod i18n {
     pub use laserfoundry_i18n::*;
 }
 mod ai_ui;
+mod box_ui;
 mod browser_recent;
 mod fit_test_ui;
 mod job_position;
@@ -209,10 +210,9 @@ pub struct LaserFoundryApp {
     grid_speed: (f64, f64),
     grid_power: (f64, f64),
     grid_size: f64,
-    /// Box maker inputs: inside width/depth/height, thickness, kerf, finger width (mm), lid.
-    box_size: [f64; 3],
-    box_material: [f64; 3],
-    box_lid: bool,
+    /// Box maker inputs (shared by the Laser panel section and the Tools window).
+    box_card: box_ui::BoxCard,
+    box_open: bool,
     array_radius: f64,
     offset_join: &'static str,
     offset_keep: bool,
@@ -430,9 +430,8 @@ impl LaserFoundryApp {
             grid_speed: (200.0, 1200.0),
             grid_power: (10.0, 60.0),
             grid_size: 10.0,
-            box_size: [100.0, 60.0, 40.0],
-            box_material: [3.0, 0.0, 10.0],
-            box_lid: true,
+            box_card: box_ui::BoxCard::default(),
+            box_open: false,
             array_radius: 40.0,
             offset_join: "round",
             offset_keep: true,
@@ -965,6 +964,7 @@ impl LaserFoundryApp {
         machine_setup::window(self, ctx);
         select_size_ui::window(self, ctx);
         fit_test_ui::window(self, ctx);
+        box_ui::window(self, ctx);
         font_ui::window(self, ctx);
         if self.pending_recovery.is_some() {
             let mut choice = None;

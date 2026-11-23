@@ -11,6 +11,10 @@ pub fn menu_bar(app: &mut LaserFoundryApp, ui: &mut egui::Ui) {
             ui.menu_button(tr("Arrange"), |ui| arrange_menu(app, ui));
             ui.menu_button(tr("Laser"), |ui| laser_menu(app, ui));
             ui.menu_button(tr("Tools"), |ui| {
+                if ui.button(tr("Box maker…")).clicked() {
+                    app.box_open = true;
+                    ui.close();
+                }
                 if ui.button(tr("Fit test card…")).clicked() {
                     app.fit_test_open = true;
                     ui.close();

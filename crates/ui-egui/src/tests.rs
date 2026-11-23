@@ -1609,6 +1609,21 @@ mod shortcut_tests {
     }
 
     #[test]
+    fn the_box_maker_window_stays_open_and_its_card_runs_the_command() {
+        let mut h = Harness::new();
+        h.app.box_open = true;
+        h.frame(vec![]);
+        assert!(h.app.box_open, "the window stays open across frames");
+        let params = h.app.box_card.params(h.app.active_layer);
+        assert_eq!(params["width"], 100.0);
+        assert_eq!(params["lid"], true);
+        assert_eq!(h.app.run("generate.box", params).unwrap()["panels"], 6);
+        h.app.box_card.lid = false;
+        let params = h.app.box_card.params(h.app.active_layer);
+        assert_eq!(h.app.run("generate.box", params).unwrap()["panels"], 5);
+    }
+
+    #[test]
     fn the_font_manager_draws_samples_and_knows_the_selected_texts_font() {
         let mut h = Harness::new();
         assert_eq!(crate::font_ui::selected_text_font(&h.app), None, "nothing selected");
