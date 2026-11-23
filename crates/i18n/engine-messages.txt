@@ -161,6 +161,7 @@ that picture has no colour (grey, or imported by an older version); import it ag
 that picture is too large or too detailed to trace
 that text is too large to bend
 that would make the picture too large
+the area has no extent
 the artwork has no shapes
 the artwork has no size
 the artwork has too many shapes
@@ -196,8 +197,10 @@ the program has {total} lines; line {line} does not exist
 the program is too long to resume
 the result is empty (the shapes do not overlap that way)
 the size is out of range
+the target size must be a positive, finite number of millimetres
 the text and the path must be different shapes
 the two marks are too close together to give a direction
+there is no map data to fit
 there is no node {0} in that sub-path
 there is no segment {0} in that sub-path
 there is no sub-path {0}
