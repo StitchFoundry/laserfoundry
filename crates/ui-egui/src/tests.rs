@@ -2144,6 +2144,21 @@ mod timeline_ui_tests {
     }
 
     #[test]
+    fn nesting_from_the_panel_can_use_a_custom_sheet_size() {
+        let mut h = Harness::new();
+        h.app.run("machine.set", json!({"bed_width": 600, "bed_height": 400}));
+        let id = h.app.run("shape.rectangle", json!({"x": 500, "y": 300, "width": 20, "height": 20})).unwrap()["id"].as_u64().unwrap();
+        h.app.nest_turn = false;
+        h.app.nest_stock = 6; // custom
+        h.app.nest_custom = (100.0, 50.0);
+        crate::panels::nest_selection(&mut h.app);
+        let b = h.app.session.doc.shape(id).unwrap().world_bounds().unwrap();
+        assert!(b.x1 <= 100.0 + 1e-6 && b.y1 <= 50.0 + 1e-6, "inside the custom sheet: {b:?}");
+        // 400 of the 5000 mm2 of the sheet.
+        assert_eq!(h.app.status, Some(("Placed 1 in the bed, 8% of the sheet used".into(), false)), "{:?}", h.app.status);
+    }
+
+    #[test]
     fn nesting_from_the_panel_can_fill_further_sheets_and_says_so() {
         let mut h = Harness::new();
         h.app.run("machine.set", json!({"bed_width": 70, "bed_height": 40}));
