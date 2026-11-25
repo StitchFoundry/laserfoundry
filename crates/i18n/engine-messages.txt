@@ -47,6 +47,7 @@ a path needs at least {0} nodes
 a path needs between {minimum} and {MAX_NODES} nodes
 a preset needs a name
 a preview sample is at most {MAX_PREVIEW_CHARS} characters
+a road needs at least two distinct, finite points, and at most {limit}
 a test grid has 1 to {MAX_COLS_ROWS} columns and rows and at most {MAX_CELLS} cells
 a value is not a finite number
 an array may add at most {MAX_NEW_SHAPES} shapes
@@ -196,6 +197,7 @@ the profile is invalid: {0}
 the program has {total} lines; line {line} does not exist
 the program is too long to resume
 the result is empty (the shapes do not overlap that way)
+the road width must be a positive, finite number of millimetres
 the size is out of range
 the target size must be a positive, finite number of millimetres
 the text and the path must be different shapes
