@@ -63,11 +63,11 @@ const SLOT_DEPTH: f64 = 8.0;
 const WALL: f64 = 6.0;
 const GAP: f64 = 3.0;
 
-/// Slot widths for a card, mm: `count` of them, `step` apart, the middle one equal to `thickness`.
-/// The caller has validated the inputs.
+/// Slot widths for a card, mm: `count` of them, `step` apart, the middle one equal to `thickness`, each snapped to the
+/// labels' 0.01 mm so the drawn slot, its label and its kerf agree (issue #189). The caller has validated the inputs.
 fn slot_widths(thickness: f64, step: f64, count: u32) -> Vec<f64> {
     let mid = f64::from(count.saturating_sub(1)) / 2.0;
-    (0..count).map(|i| thickness + (f64::from(i) - mid) * step).collect()
+    (0..count).map(|i| ((thickness + (f64::from(i) - mid) * step) * 100.0).round() / 100.0).collect()
 }
 
 /// The kerf (mm the cut removes beyond the drawn line) implied by the slot the material just fits: a slot drawn `slot` wide cuts
@@ -164,5 +164,18 @@ mod tests {
             assert!(s.execute("generate.fit_test", &bad).is_err(), "{bad}");
         }
         assert_eq!(s.doc.shapes.len(), 6, "failures change nothing");
+    }
+    #[test]
+    fn a_step_finer_than_the_labels_still_draws_each_slot_at_its_label_width() {
+        let mut s = Session::new();
+        let v = s.execute("generate.fit_test", &json!({"thickness": 3.005, "step": 0.025, "count": 5})).unwrap();
+        for slot in v["slots"].as_array().unwrap() {
+            let label = slot["width"].as_str().unwrap();
+            let shape = s.doc.shapes.iter().find(|sh| sh.name == format!("Fit slot {label}")).unwrap().world_bounds().unwrap();
+            let drawn = shape.x1 - shape.x0;
+            assert!((drawn - label.parse::<f64>().unwrap()).abs() < 1e-9, "slot labelled {label} is drawn {drawn} wide");
+            let kerf: f64 = slot["kerf"].as_str().unwrap().parse().unwrap();
+            assert!((kerf - (3.005 - drawn)).abs() < 0.005 + 1e-9, "kerf {kerf} for a {drawn} slot");
+        }
     }
 }
