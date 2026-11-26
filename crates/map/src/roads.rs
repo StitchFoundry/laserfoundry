@@ -15,9 +15,12 @@ pub const MAX_ROAD_POINTS: usize = crate::MAX_VERTICES_PER_FEATURE;
 /// A mitre is used only while `1 + cos(turn)` stays above this (so the spike is under 1 / this times the half width).
 pub const MITRE_LIMIT: f64 = 0.25;
 
+/// Widest road outline drawn, mm: wider than any bed, so anything above is a misread scale.
+pub const MAX_ROAD_WIDTH_MM: f64 = 10_000.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum RoadError {
-    #[error("the road width must be a positive, finite number of millimetres")]
+    #[error("the road width must be a positive, finite number of millimetres, at most {limit}", limit = MAX_ROAD_WIDTH_MM)]
     BadWidth,
     #[error("a road needs at least two distinct, finite points, and at most {limit}", limit = MAX_ROAD_POINTS)]
     BadLine,
@@ -25,7 +28,8 @@ pub enum RoadError {
 
 /// The drawn width in millimetres for an OpenStreetMap `highway` value, given `mm_per_metre` (the map scale:
 /// millimetres on the bed per metre on the ground). Widths are rough real-world widths in metres. `None` for a
-/// class that is not a road for cutting (footpaths and the like are narrow lines, not outlines) or a bad scale.
+/// class that is not a road for cutting (footpaths and the like are narrow lines, not outlines), a bad scale, or a
+/// width over [`MAX_ROAD_WIDTH_MM`].
 /// Classes: <https://wiki.openstreetmap.org/wiki/Key:highway>.
 pub fn road_width_mm(highway: &str, mm_per_metre: f64) -> Option<f64> {
     if !(mm_per_metre.is_finite() && mm_per_metre > 0.0) {
@@ -39,12 +43,13 @@ pub fn road_width_mm(highway: &str, mm_per_metre: f64) -> Option<f64> {
         "residential" | "unclassified" | "living_street" | "service" => 5.0,
         _ => return None,
     };
-    Some(metres * mm_per_metre)
+    Some(metres * mm_per_metre).filter(|w| w.is_finite() && *w <= MAX_ROAD_WIDTH_MM)
 }
 
-/// Widens a centre line into a closed outline of `width_mm` (see the module docs). Repeated points are dropped.
+/// Widens a centre line into a closed outline of `width_mm` (see the module docs). Repeated points are dropped; an
+/// outline that would not be finite is refused.
 pub fn offset_polyline(line: &[Mm], width_mm: f64) -> Result<Vec<Mm>, RoadError> {
-    if !(width_mm.is_finite() && width_mm > 0.0) {
+    if !(width_mm.is_finite() && width_mm > 0.0 && width_mm <= MAX_ROAD_WIDTH_MM) {
         return Err(RoadError::BadWidth);
     }
     if line.len() > MAX_ROAD_POINTS {
@@ -98,6 +103,10 @@ pub fn offset_polyline(line: &[Mm], width_mm: f64) -> Result<Vec<Mm>, RoadError>
     }
     right.reverse();
     left.extend(right);
+    // Finite points can still overflow once the half width is added (issue #192).
+    if left.iter().any(|p| !(p.x.is_finite() && p.y.is_finite())) {
+        return Err(RoadError::BadLine);
+    }
     Ok(left)
 }
 
@@ -159,6 +168,16 @@ mod tests {
         assert_eq!(offset_polyline(&[mm(0.0, 0.0), mm(f64::MAX, f64::MAX)], 1.0), Err(RoadError::BadLine));
         let long = vec![mm(0.0, 0.0); MAX_ROAD_POINTS + 1];
         assert_eq!(offset_polyline(&long, 1.0), Err(RoadError::BadLine));
+    }
+
+    #[test]
+    fn results_that_would_overflow_are_refused_not_returned() {
+        // Issue #192: finite inputs whose result overflows to infinity.
+        assert_eq!(road_width_mm("motorway", 1e308), None);
+        assert_eq!(offset_polyline(&[mm(0.0, 1.5e308), mm(1.0, 1.5e308)], 1e308), Err(RoadError::BadWidth));
+        assert_eq!(offset_polyline(&[mm(0.0, 0.0), mm(1.0, 0.0)], MAX_ROAD_WIDTH_MM + 1.0), Err(RoadError::BadWidth));
+        let edge = offset_polyline(&[mm(0.0, f64::MAX), mm(1.0, f64::MAX), mm(1.0, 0.0)], MAX_ROAD_WIDTH_MM).unwrap();
+        assert!(edge.iter().all(|p| p.x.is_finite() && p.y.is_finite()), "{edge:?}");
     }
 
     #[test]
