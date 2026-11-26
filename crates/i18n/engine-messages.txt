@@ -197,7 +197,7 @@ the profile is invalid: {0}
 the program has {total} lines; line {line} does not exist
 the program is too long to resume
 the result is empty (the shapes do not overlap that way)
-the road width must be a positive, finite number of millimetres
+the road width must be a positive, finite number of millimetres, at most {limit}
 the size is out of range
 the target size must be a positive, finite number of millimetres
 the text and the path must be different shapes
