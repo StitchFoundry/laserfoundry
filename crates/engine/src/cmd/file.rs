@@ -224,8 +224,11 @@ fn import_svg(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
         ids.push(s.doc.add_shape(shape));
     }
     s.selection = ids.clone();
-    let note = text_note(svg.text_substituted, svg.text_dropped);
+    let note = [text_note(svg.text_substituted, svg.text_dropped), svg.skipped.note()].into_iter().flatten().collect::<Vec<_>>().join(" ");
+    let note = if note.is_empty() { None } else { Some(note) };
     Ok(json!({
+        "skipped_nested_svg": svg.skipped.nested_svg, "skipped_images_over_cap": svg.skipped.images_over_cap,
+        "paths_truncated": svg.skipped.paths_truncated,
         "ids": ids, "width_mm": svg.width_mm, "height_mm": svg.height_mm, "skipped_images": skipped_images,
         "text_outlined": svg.text_outlined, "text_substituted": svg.text_substituted, "text_dropped": svg.text_dropped, "note": note,
     }))
