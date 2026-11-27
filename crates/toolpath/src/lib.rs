@@ -9,6 +9,7 @@ mod palette;
 mod perforate;
 mod raster;
 mod tabs;
+mod timelapse;
 mod timeline;
 mod trace;
 
@@ -17,6 +18,7 @@ pub use order::{order_polylines, remove_duplicates};
 pub use overlap::remove_overlaps;
 pub use palette::{BACKGROUND, MAX_COLORS, Quantized, quantize};
 pub use raster::{Grid, dither, sample_grid};
+pub use timelapse::{Aspect, Frame, FramePlan, Timelapse};
 pub use timeline::{LayerTime, Moment, Motion, OpTime, Timeline, move_seconds, move_times};
 pub use trace::{MAX_TRACE_PIXELS, trace};
 
