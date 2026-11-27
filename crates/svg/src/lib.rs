@@ -60,6 +60,40 @@ pub struct SvgImport {
     pub text_substituted: usize,
     /// `<text>` items with words that could not be drawn at all (no font anywhere).
     pub text_dropped: usize,
+    /// Content the importer left out (nested SVG pictures, items past the caps).
+    pub skipped: Skipped,
+}
+
+/// Content of the file that did not make it into the import, so the caller can say so instead of showing a quiet partial design.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Skipped {
+    /// Pictures that are themselves SVG files (not supported inside an import).
+    pub nested_svg: usize,
+    /// Pictures left out because of [`MAX_IMAGES`] or [`MAX_IMAGE_BYTES`].
+    pub images_over_cap: usize,
+    /// True when shapes past [`MAX_PATHS`] were left out.
+    pub paths_truncated: bool,
+}
+
+impl Skipped {
+    /// A sentence for the person, or `None` when nothing was left out.
+    pub fn note(&self) -> Option<String> {
+        let mut parts = Vec::new();
+        if self.nested_svg > 0 {
+            parts.push(format!("{} embedded SVG picture(s) are not supported", self.nested_svg));
+        }
+        if self.images_over_cap > 0 {
+            parts.push(format!(
+                "{} picture(s) were left out (limit {MAX_IMAGES} pictures / {} MB)",
+                self.images_over_cap,
+                MAX_IMAGE_BYTES / 1024 / 1024
+            ));
+        }
+        if self.paths_truncated {
+            parts.push(format!("shapes past the limit of {MAX_PATHS} were left out"));
+        }
+        if parts.is_empty() { None } else { Some(format!("Partial import: {}.", parts.join("; "))) }
+    }
 }
 
 /// What a text outliner is asked to draw: one run of text in one style.
@@ -145,6 +179,7 @@ fn import_inner(data: &[u8], outliner: Option<&dyn TextOutliner>, system_fonts: 
         text_outlined: found.text_outlined,
         text_substituted: found.text_substituted,
         text_dropped: found.text_dropped,
+        skipped: found.skipped,
     })
 }
 
@@ -180,6 +215,7 @@ struct Found<'a> {
     text_outlined: usize,
     text_substituted: usize,
     text_dropped: usize,
+    skipped: Skipped,
 }
 
 /// Ids of the shapes that stand in for `<text>` while `usvg` reads the file.
@@ -355,7 +391,13 @@ fn place_text(p: &usvg::Path, found: &mut Found) {
 fn collect(group: &usvg::Group, found: &mut Found) {
     for node in group.children() {
         if found.paths.len() >= MAX_PATHS {
-            return;
+            // Only a real loss counts: a file that ends exactly at the cap is complete.
+            match node {
+                usvg::Node::Group(g) => collect(g, found),
+                usvg::Node::Path(_) | usvg::Node::Text(_) => found.skipped.paths_truncated = true,
+                usvg::Node::Image(_) => {}
+            }
+            continue;
         }
         let out = &mut found.paths;
         match node {
@@ -365,9 +407,13 @@ fn collect(group: &usvg::Group, found: &mut Found) {
             usvg::Node::Image(img) => {
                 let bytes = match img.kind() {
                     usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) | usvg::ImageKind::GIF(d) | usvg::ImageKind::WEBP(d) => d.as_slice(),
-                    usvg::ImageKind::SVG(_) => continue,
+                    usvg::ImageKind::SVG(_) => {
+                        found.skipped.nested_svg += 1;
+                        continue;
+                    }
                 };
                 if found.images.len() >= MAX_IMAGES || found.image_bytes + bytes.len() > MAX_IMAGE_BYTES {
+                    found.skipped.images_over_cap += 1;
                     continue;
                 }
                 let size = img.size();
@@ -671,5 +717,44 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn skipped_content_is_reported() {
+        let clean = import_svg(br#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="5" height="5"/></svg>"#).unwrap();
+        assert_eq!(clean.skipped, Skipped::default());
+        assert!(clean.skipped.note().is_none());
+
+        let rects = r#"<rect width="1" height="1"/>"#;
+        let at_cap = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">{}</svg>"#, rects.repeat(MAX_PATHS));
+        let out = import_svg(at_cap.as_bytes()).unwrap();
+        assert_eq!(out.paths.len(), MAX_PATHS);
+        assert!(!out.skipped.paths_truncated, "a file that ends exactly at the cap lost nothing");
+        let over = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">{}</svg>"#, rects.repeat(MAX_PATHS + 1));
+        let out = import_svg(over.as_bytes()).unwrap();
+        assert!(out.skipped.paths_truncated);
+        assert!(out.skipped.note().is_some_and(|n| n.starts_with("Partial import")));
+    }
+
+    #[test]
+    fn nested_svg_pictures_are_counted() {
+        let inner = "<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2'/></svg>";
+        let b64 = {
+            const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            let mut o = String::new();
+            for c in inner.as_bytes().chunks(3) {
+                let n = (u32::from(c[0]) << 16) | (u32::from(*c.get(1).unwrap_or(&0)) << 8) | u32::from(*c.get(2).unwrap_or(&0));
+                for i in 0..4 {
+                    if i <= c.len() { o.push(T[((n >> (18 - 6 * i)) & 63) as usize] as char) } else { o.push('=') }
+                }
+            }
+            o
+        };
+        let svg = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="10" height="10"><image width="4" height="4" xlink:href="data:image/svg+xml;base64,{b64}"/></svg>"#
+        );
+        let out = import_svg(svg.as_bytes()).unwrap();
+        assert_eq!(out.skipped.nested_svg, 1);
+        assert!(out.images.is_empty());
     }
 }
