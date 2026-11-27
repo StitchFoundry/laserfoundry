@@ -1,5 +1,6 @@
 //! LaserFoundry desktop app: hosts the egui front end in an eframe window.
 
+mod control;
 mod host;
 mod net;
 
@@ -13,7 +14,15 @@ fn main() -> eframe::Result {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     let mut session = Session::new();
     // Agent access is off unless asked for: it lets a local program edit the open drawing.
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // The control port is off unless asked for: it lets a local program drive the app (never the machine).
+    let control_port = match control::take_port(&mut args, std::env::var("LASERFOUNDRY_CONTROL_PORT").ok().as_deref()) {
+        Ok(port) => port,
+        Err(message) => {
+            eprintln!("laserfoundry: {message}");
+            std::process::exit(2);
+        }
+    };
     let agent_access = args.iter().any(|a| a == "--agent-link") || std::env::var_os("LASERFOUNDRY_AGENT_LINK").is_some_and(|v| v == "1");
     if let Some(path) = args.iter().find(|a| !a.starts_with("--")).map(PathBuf::from) {
         let (id, key) = match path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
@@ -41,7 +50,8 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             let agent_link = agent_access.then(|| start_agent_link(&cc.egui_ctx)).flatten();
-            Ok(Box::new(host::Host { app: LaserFoundryApp::new(session, Box::new(host::DesktopPlatform::default())), agent_link }))
+            let control = control_port.and_then(|port| control::Control::start(port, &cc.egui_ctx));
+            Ok(Box::new(host::Host { app: LaserFoundryApp::new(session, Box::new(host::DesktopPlatform::default())), agent_link, control }))
         }),
     )
 }

@@ -14,12 +14,17 @@ pub struct Host {
     pub app: LaserFoundryApp,
     /// Present only when the person switched agent access on; closing the app closes it.
     pub agent_link: Option<LinkServer>,
+    /// Present only when started with `--control <port>`: the loopback control port for tests and screenshots.
+    pub control: Option<crate::control::Control>,
 }
 
 impl eframe::App for Host {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if let Some(link) = &mut self.agent_link {
             link.serve_pending(&mut self.app.session);
+        }
+        if let Some(control) = &mut self.control {
+            control.serve_pending(&mut self.app, ui.ctx());
         }
         self.app.ui(ui);
     }

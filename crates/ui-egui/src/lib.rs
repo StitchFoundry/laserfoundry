@@ -345,6 +345,17 @@ pub(crate) enum PendingAction {
 pub const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(20);
 
 impl LaserFoundryApp {
+    /// What a tester or agent can see of the interface without a screenshot (the control port's `ui.inspect`).
+    pub fn inspect(&self) -> serde_json::Value {
+        serde_json::json!({
+            "tool": format!("{:?}", self.tool),
+            "panels": { "inspector": self.show_inspector },
+            "selection": self.session.selection.len(),
+            "shapes": self.session.doc.shapes.len(),
+            "dirty": self.session.dirty,
+        })
+    }
+
     pub fn new(session: Session, platform: Box<dyn Platform>) -> Self {
         let ports = platform.serial_ports();
         // Offer the newest autosave that still reads back; a damaged newest copy falls back to an older one.
