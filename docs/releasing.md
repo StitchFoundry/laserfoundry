@@ -32,3 +32,12 @@ secrets (no repository variables are used):
 
 To try the macOS packaging without secrets, run `packaging/macos/package.sh <dir with laserfoundry and laserfoundry-cli> <out>` on
 a Mac; without `KEYCHAIN` set it builds an unsigned app.
+
+## Windows installer (slice 1 of #188)
+
+`packaging/windows/build.ps1 -Bin <dir with laserfoundry.exe and laserfoundry-cli.exe> -Out <dir>` builds
+`laserfoundry-windows-x64-setup.exe` with [Inno Setup](https://jrsoftware.org/isinfo.php) (preinstalled on GitHub's Windows
+runners). It installs per user by default (no administrator rights; the dialog offers all users), adds a Start menu entry, an
+optional desktop shortcut and an optional PATH entry for `laserfoundry-cli`, and registers an uninstaller. The icon is drawn by
+`laserfoundry-icon ico`, so no image file is committed. The zip stays. Nothing in the workflows calls the script yet, and the
+setup file is not signed (sign it after the build once the Windows signing step covers it).
