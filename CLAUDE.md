@@ -12,6 +12,7 @@ with `craftrules` when it is available. The crafting apps share standards, **nev
 from a sibling repo, write it here.
 
 ## Start every session here
+0. **Setup (fresh container):** run `rustup target add wasm32-unknown-unknown` once, or `cargo xtask ci` stops at the wasm step. (A `rust-toolchain.toml` was not used: it would pin or override the toolchain the agents and CI already have.)
 1. Read [`ROADMAP.md`](ROADMAP.md) (stage, what is next) and the ranked work list in [`docs/gaps.md`](docs/gaps.md). Unless the user gives you a task, pick work from that list.
 2. Read [`docs/architecture.md`](docs/architecture.md) for the layers and the command model.
 3. Orient → plan → implement + test → verify → record → commit. One task per commit.
