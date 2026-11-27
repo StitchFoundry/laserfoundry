@@ -70,6 +70,7 @@ file.import_image
 file.autosave
 file.recover
 file.export_svg
+file.share_image
 file.export_gcode
 image.adjust
 image.crop

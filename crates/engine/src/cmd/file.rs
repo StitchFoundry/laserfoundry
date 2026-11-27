@@ -99,6 +99,15 @@ pub(super) const COMMANDS: &[CommandSpec] = &[
         run: export_svg,
     },
     CommandSpec {
+        id: "file.share_image",
+        label: "Save share image…",
+        menu: "File/Export",
+        shortcut: None,
+        params_doc: "{path, format? (square = 1080x1080, the default, or portrait = 1080x1350)}  — a PNG of the finished design in its layer colours on a plain background; drawn offline, layers with output off are left out",
+        mutates: false,
+        run: share_image,
+    },
+    CommandSpec {
         id: "file.export_gcode",
         label: "Save G-code…",
         menu: "File/Export",
@@ -418,6 +427,24 @@ fn export_svg(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
         std::fs::write(path, &svg)?;
     }
     Ok(if p.include { json!({ "shapes": shapes, "bytes": svg.len(), "svg": svg }) } else { json!({ "shapes": shapes, "bytes": svg.len() }) })
+}
+
+#[derive(Deserialize)]
+struct ShareImageParams {
+    path: PathBuf,
+    format: Option<String>,
+}
+
+fn share_image(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    use super::share_image::{Format, WIDTH, render_png};
+    let p: ShareImageParams = parse(params)?;
+    let format = match p.format.as_deref() {
+        None => Format::Square,
+        Some(name) => Format::parse(name).ok_or_else(|| EngineError::BadParams("format is square or portrait".into()))?,
+    };
+    let png = render_png(&s.doc, format)?;
+    std::fs::write(&p.path, &png)?;
+    Ok(json!({ "path": p.path, "width": WIDTH, "height": format.height(), "bytes": png.len() }))
 }
 
 fn export_gcode(s: &mut Session, params: &Value) -> Result<Value, EngineError> {

@@ -1496,6 +1496,31 @@ mod import_tests {
     }
 
     #[test]
+    fn share_image_is_a_png_at_the_two_social_sizes_and_draws_the_design() {
+        let mut s = Session::new();
+        let dir = std::env::temp_dir().join(format!("lf-engine-share-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(s.execute("file.share_image", &json!({"path": dir.join("x.png")})).is_err(), "nothing to draw");
+        s.execute("shape.rectangle", &json!({"x": 10, "y": 20, "width": 30, "height": 15})).unwrap();
+        s.execute("shape.ellipse", &json!({"cx": 80, "cy": 40, "rx": 10, "ry": 5, "layer": 1})).unwrap();
+        s.execute("layer.set", &json!({"id": 1, "mode": "fill"})).unwrap();
+        for (format, height) in [(None, 1080), (Some("square"), 1080), (Some("portrait"), 1350)] {
+            let file = dir.join(format!("share-{height}.png"));
+            let mut params = json!({"path": file});
+            if let Some(f) = format {
+                params["format"] = json!(f);
+            }
+            let v = s.execute("file.share_image", &params).unwrap();
+            assert_eq!((v["width"].as_u64(), v["height"].as_u64()), (Some(1080), Some(height)));
+            let img = image::open(&file).unwrap().to_rgb8();
+            assert_eq!(img.dimensions(), (1080, height as u32));
+            assert!(img.pixels().any(|p| p.0 != img.get_pixel(0, 0).0), "the design is drawn on the plain background");
+        }
+        assert!(s.execute("file.share_image", &json!({"path": dir.join("y.png"), "format": "wide"})).is_err());
+        assert!(s.execute("file.share_image", &json!({"path": dir.join("no/such/dir/z.png")})).is_err());
+    }
+
+    #[test]
     fn svg_export_embeds_pictures_as_png_with_their_placement() {
         let dir = std::env::temp_dir().join(format!("lf-engine-svgimg-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
