@@ -16,6 +16,7 @@ repository = "https://github.com/StitchFoundry/laserfoundry"
 laserfoundry-geom = { path = "crates/geom" }
 laserfoundry-camera = { path = "crates/camera" }
 laserfoundry-i18n = { path = "crates/i18n" }
+laserfoundry-update = { path = "crates/update" }
 laserfoundry-fontlib = { path = "crates/fontlib" }
 laserfoundry-ai = { path = "crates/ai" }
 laserfoundry-doc = { path = "crates/doc" }

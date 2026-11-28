@@ -125,3 +125,10 @@ path = "fuzz_targets/map_geojson.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "update_manifest"
+path = "fuzz_targets/update_manifest.rs"
+test = false
+doc = false
+bench = false

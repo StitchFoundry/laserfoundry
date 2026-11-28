@@ -1,0 +1,15 @@
+[package]
+name = "laserfoundry-update"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Update check: version comparison and release manifest verification (no network code)"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+ed25519-dalek = { version = "2", default-features = false }
+sha2 = "0.10"
