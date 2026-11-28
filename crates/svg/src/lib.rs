@@ -376,6 +376,7 @@ fn place_text(p: &usvg::Path, found: &mut Found) {
     let x0 = chunk.x + (f64::from(chunk.anchor) + 1.0) * -width / 2.0;
     for (mut path, offset, color) in drawn {
         if found.paths.len() >= MAX_PATHS {
+            found.skipped.paths_truncated = true;
             return;
         }
         path.apply_affine(Affine::scale(MM_PER_PX) * m * Affine::translate((x0 + offset, chunk.y)));
@@ -393,11 +394,17 @@ fn collect(group: &usvg::Group, found: &mut Found) {
         if found.paths.len() >= MAX_PATHS {
             // Only a real loss counts: a file that ends exactly at the cap is complete.
             match node {
-                usvg::Node::Group(g) => collect(g, found),
-                usvg::Node::Path(_) | usvg::Node::Text(_) => found.skipped.paths_truncated = true,
+                usvg::Node::Group(g) => {
+                    collect(g, found);
+                    continue;
+                }
+                usvg::Node::Path(_) | usvg::Node::Text(_) => {
+                    found.skipped.paths_truncated = true;
+                    continue;
+                }
+                // Pictures have their own caps and counts, below.
                 usvg::Node::Image(_) => {}
             }
-            continue;
         }
         let out = &mut found.paths;
         match node {
@@ -700,6 +707,62 @@ mod tests {
                 assert!(!img.bytes.is_empty());
             }
         }
+    }
+
+    #[test]
+    fn content_past_the_shape_cap_is_reported_and_pictures_keep_their_own_cap() {
+        let rects = r#"<rect width="1" height="1"/>"#.repeat(MAX_PATHS);
+        // A picture after the last shape the cap allows: pictures have their own caps, so it still comes in.
+        let b64 = base64_encode(&tiny_png());
+        let svg = format!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"10\" height=\"10\">{rects}\
+             <image x=\"1\" y=\"1\" width=\"4\" height=\"4\" xlink:href=\"data:image/png;base64,{b64}\"/></svg>"
+        );
+        let out = import_svg(svg.as_bytes()).unwrap();
+        assert_eq!(out.paths.len(), MAX_PATHS);
+        assert_eq!(out.images.len(), 1, "a picture is not dropped because the shape cap was reached");
+        assert!(!out.skipped.paths_truncated);
+
+        // Text whose second run would pass the cap: the run left out is reported.
+        let rects = r#"<rect width="1" height="1"/>"#.repeat(MAX_PATHS - 1);
+        let svg = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">{rects}<text x="1" y="50" font-family="Arial" font-size="10">One<tspan font-size="20"> two</tspan></text></svg>"#
+        );
+        let out = import_svg_without_system_fonts(svg.as_bytes(), Some(&BoxOutliner(Some(2.0)))).unwrap();
+        assert_eq!(out.paths.len(), MAX_PATHS);
+        assert!(out.skipped.paths_truncated, "the text run past the cap was left out without a note");
+    }
+
+    /// A valid 1×1 PNG, built here with its CRCs computed rather than copied from anywhere.
+    fn tiny_png() -> Vec<u8> {
+        fn crc(data: &[u8]) -> u32 {
+            let mut c = 0xffff_ffff_u32;
+            for &b in data {
+                c ^= u32::from(b);
+                for _ in 0..8 {
+                    c = if c & 1 == 1 { 0xedb8_8320 ^ (c >> 1) } else { c >> 1 };
+                }
+            }
+            !c
+        }
+        fn chunk(out: &mut Vec<u8>, kind: &[u8], data: &[u8]) {
+            out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+            let mut body = kind.to_vec();
+            body.extend_from_slice(data);
+            out.extend_from_slice(&body);
+            out.extend_from_slice(&crc(&body).to_be_bytes());
+        }
+        // One grey pixel (filter byte 0, value 0x80) in an uncompressed (stored) zlib block, with its Adler-32.
+        let raw = [0u8, 0x80];
+        let (a, b) = raw.iter().fold((1u32, 0u32), |(a, b), &x| ((a + u32::from(x)) % 65521, (b + a + u32::from(x)) % 65521));
+        let mut zlib = vec![0x78, 0x01, 0x01, 0x02, 0x00, 0xfd, 0xff];
+        zlib.extend_from_slice(&raw);
+        zlib.extend_from_slice(&((b << 16) | a).to_be_bytes());
+        let mut png = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+        chunk(&mut png, b"IHDR", &[0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0]);
+        chunk(&mut png, b"IDAT", &zlib);
+        chunk(&mut png, b"IEND", &[]);
+        png
     }
 
     fn base64_encode(data: &[u8]) -> String {
