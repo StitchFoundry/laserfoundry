@@ -18,6 +18,16 @@ pub fn camera_profile(data: &[u8]) {
     }
 }
 
+/// A release manifest and its signature as they arrive from the network: the version rules and the
+/// manifest parser, with a key the input cannot match.
+pub fn update_manifest(data: &[u8]) {
+    let text = String::from_utf8_lossy(data);
+    let (manifest, signature) = text.split_once('\n').unwrap_or((&text, ""));
+    let _ = laserfoundry_update::check("laserfoundry", "0.6.0", manifest.as_bytes(), signature, &[7; 32]);
+    let _ = laserfoundry_update::is_newer("0.6.0", &text);
+    let _ = laserfoundry_update::verify_sha256(manifest.as_bytes(), signature);
+}
+
 pub fn svg(data: &[u8]) {
     let _ = laserfoundry_svg::import_svg(data);
 }
@@ -337,6 +347,11 @@ mod tests {
     fn controller_lines_and_programs_survive_mutation() {
         drive(STATUS, controller_line, 3000);
         drive(GCODE, gcode_program, 1500);
+    }
+
+    #[test]
+    fn update_manifests_survive_mutation() {
+        drive("{\"program\":\"laserfoundry\",\"version\":\"0.7.0\",\"url\":\"https://x.org/\"}\n0123abcd", update_manifest, 3000);
     }
 
     #[test]

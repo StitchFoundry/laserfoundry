@@ -21,5 +21,6 @@ laserfoundry-mcp = { workspace = true }
 laserfoundry-text = { workspace = true }
 laserfoundry-fontlib = { workspace = true }
 laserfoundry-ai = { workspace = true }
+laserfoundry-update = { workspace = true }
 laserfoundry-web = { path = "../../apps/laserfoundry-web" }
 serde_json = { workspace = true }
